@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title th:text="${server.name}"></title>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -12,20 +14,27 @@
 
         <main class="page-content">
             <h1 th:text="${server.name}"></h1>
-            <p>Interface de Chat pour Modèle de Langage</p>
             
+            <div class="card" style="margin-bottom: 20px;">
+                <h4>Gérer les modèles</h4>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <label for="model-selector" style="white-space: nowrap;">Modèle à utiliser :</label>
+                    <select id="model-selector" style="flex-grow: 1; padding: 8px; background-color: var(--background-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;"></select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 15px; margin-top: 15px;">
+                     <label for="download-model-input" style="white-space: nowrap;">Télécharger un modèle :</label>
+                     <input type="text" id="download-model-input" placeholder="ex: llama3:8b" style="flex-grow: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--background-secondary); color: var(--text-primary);">
+                     <button id="download-model-button" class="action-btn">Télécharger</button>
+                </div>
+            </div>
+
             <div class="card">
                 <h2>Conversation</h2>
-                <div id="chat-box" style="height: 400px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; margin-bottom: 10px; background-color: var(--background-tertiary); border-radius: 4px;">
-                    </div>
+                <div id="chat-box" style="height: 400px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; margin-bottom: 10px; background-color: var(--background-tertiary); border-radius: 4px;"></div>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="chat-input" placeholder="Envoyez un message..." style="flex-grow: 1; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--background-secondary); color: var(--text-primary);">
                     <button id="send-button" class="action-btn btn-start">Envoyer</button>
                 </div>
-            </div>
-             <div class="card" style="margin-top: 20px;">
-                <h4>Modèles disponibles sur cette instance Ollama :</h4>
-                <pre id="model-list"></pre>
             </div>
         </main>
     </div>
@@ -34,11 +43,16 @@
         window.addEventListener('DOMContentLoaded', () => {
             const serverId = /*[[${server.id}]]*/ '1';
             const serverPort = /*[[${server.hostPort}]]*/ '11434';
+            const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+            const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+            const apiUrl = `http://${window.location.hostname}:${serverPort}`;
+
             const chatBox = document.getElementById('chat-box');
             const chatInput = document.getElementById('chat-input');
             const sendButton = document.getElementById('send-button');
-            const modelList = document.getElementById('model-list');
-            const apiUrl = `http://${window.location.hostname}:${serverPort}`;
+            const modelSelector = document.getElementById('model-selector');
+            const downloadInput = document.getElementById('download-model-input');
+            const downloadButton = document.getElementById('download-model-button');
 
             const addMessage = (sender, text) => {
                 const message = document.createElement('p');
@@ -49,7 +63,12 @@
 
             const sendMessage = async () => {
                 const message = chatInput.value;
-                if (!message) return;
+                const selectedModel = modelSelector.value;
+
+                if (!message || !selectedModel) {
+                    addMessage("Système", "<span style='color: #f4a261;'>Veuillez sélectionner un modèle avant d'envoyer un message.</span>");
+                    return;
+                }
                 
                 addMessage('Vous', message);
                 chatInput.value = '';
@@ -60,41 +79,88 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            model: "llama2", // Note: le modèle doit être installé dans le conteneur !
+                            model: selectedModel,
                             prompt: message,
                             stream: false 
                         })
                     });
                     
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Erreur API: ${response.statusText}`);
+                    }
+
                     const data = await response.json();
                     chatBox.lastChild.innerHTML = `<strong>LLM:</strong> ${data.response}`;
 
                 } catch (error) {
                     console.error("Erreur de communication avec l'API Ollama:", error);
-                    chatBox.lastChild.innerHTML = `<strong>LLM:</strong> <span style="color: #e76f51;">Erreur de connexion. Le service est-il démarré ?</span>`;
+                    chatBox.lastChild.innerHTML = `<strong>LLM:</strong> <span style="color: #e76f51;">Erreur : ${error.message}</span>`;
                 }
             };
 
             const fetchModels = async () => {
-                 try {
+                try {
                     const response = await fetch(`${apiUrl}/api/tags`);
                     const data = await response.json();
+                    const previousSelection = modelSelector.value;
+                    modelSelector.innerHTML = '';
+                    
                     if (data.models && data.models.length > 0) {
-                        modelList.textContent = JSON.stringify(data.models.map(m => m.name), null, 2);
+                        data.models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.name;
+                            option.textContent = model.name;
+                            modelSelector.appendChild(option);
+                        });
+                        if (previousSelection) modelSelector.value = previousSelection;
                     } else {
-                         modelList.textContent = "Aucun modèle trouvé. Vous pouvez en installer un via la console du conteneur :\ndocker exec -it [container_id] ollama pull llama2";
+                         modelSelector.innerHTML = '<option value="">Aucun modèle installé</option>';
+                         addMessage('Système', 'Utilisez le champ ci-dessus pour télécharger un modèle (ex: gemma:2b).');
                     }
                 } catch (error) {
-                     modelList.textContent = "Impossible de contacter l'API Ollama.";
+                     modelSelector.innerHTML = '<option>Erreur de connexion</option>';
+                }
+            };
+            
+            const downloadModel = async () => {
+                const modelName = downloadInput.value;
+                if (!modelName) {
+                    alert("Veuillez entrer un nom de modèle à télécharger.");
+                    return;
+                }
+                
+                downloadButton.disabled = true;
+                downloadButton.textContent = "En cours...";
+                addMessage("Système", `Téléchargement du modèle '${modelName}' en cours... Ceci peut prendre plusieurs minutes.`);
+
+                try {
+                    const response = await fetch(`/api/server/${serverId}/llm/pull`, {
+                        method: 'POST',
+                        headers: { [csrfHeader]: csrfToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(modelName)
+                    });
+
+                    if (!response.ok) throw new Error("La requête au backend a échoué.");
+                    
+                    addMessage("Système", "Téléchargement terminé ! Rafraîchissement de la liste des modèles...");
+                    downloadInput.value = "";
+                    await fetchModels();
+
+                } catch (error) {
+                    console.error("Erreur lors du téléchargement:", error);
+                    addMessage("Système", `<span style="color: #e76f51;">Échec du téléchargement du modèle.</span>`);
+                } finally {
+                    downloadButton.disabled = false;
+                    downloadButton.textContent = "Télécharger";
                 }
             };
 
             sendButton.addEventListener('click', sendMessage);
-            chatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') sendMessage();
-            });
+            chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });
+            downloadButton.addEventListener('click', downloadModel);
 
-            addMessage('Système', 'Bienvenue ! Envoyez un message pour commencer.');
+            addMessage('Système', 'Bienvenue ! La liste des modèles installés est en cours de chargement...');
             fetchModels();
         });
     </script>

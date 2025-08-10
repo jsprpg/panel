@@ -212,4 +212,20 @@ public class ServerApiController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+    
+    @PostMapping("/api/server/{id}/llm/pull")
+    public ResponseEntity<String> pullLlmModel(@PathVariable Long id, @RequestBody String modelName) {
+        Server server = serverRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Serveur non trouvé"));
+        
+        String cleanModelName = modelName.replaceAll("\"", "").trim();
+
+        try {
+            dockerService.pullLlmModel(server.getContainerId(), cleanModelName);
+            return ResponseEntity.ok("Téléchargement du modèle '" + cleanModelName + "' lancé avec succès.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Échec du téléchargement du modèle : " + e.getMessage());
+        }
+    }
 }

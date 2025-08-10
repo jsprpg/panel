@@ -35,7 +35,7 @@
                     <input type="text" id="serverName" name="serverName" required>
                     <br><br>
                     
-                    <label for="serverPort">Port (ex: 25565) :</label>
+                    <label for="serverPort">Port principal :</label>
                     <input type="number" id="serverPort" name="serverPort" required>
                     <br><br>
                     
@@ -63,88 +63,85 @@
         const subcategoriesGrid = document.getElementById('subcategories-grid');
         const eggsGrid = document.getElementById('eggs-grid');
         const selectedDockerImageInput = document.getElementById('selected-docker-image');
+        const serverPortInput = document.getElementById('serverPort');
 
-        let activeCategoryCard = null;
-        let activeSubCategoryCard = null;
-        let activeEggCard = null;
-        
-        let selectedCategory = '';
+        let activeCategoryCard, activeSubCategoryCard, activeEggCard, selectedCategory;
 
-        // Initialise les catégories
         Object.keys(categoriesData).forEach(categoryName => {
-            const categoryCard = document.createElement('div');
-            categoryCard.className = 'selection-card';
-            categoryCard.dataset.categoryName = categoryName;
-            categoryCard.innerHTML = `<i class="fa-solid fa-folder-tree"></i><h4>${categoryName}</h4>`;
-            categoriesGrid.appendChild(categoryCard);
+            const card = document.createElement('div');
+            card.className = 'selection-card';
+            card.dataset.categoryName = categoryName;
+            card.innerHTML = `<i class="fa-solid fa-folder-tree"></i><h4>${categoryName}</h4>`;
+            categoriesGrid.appendChild(card);
         });
 
-        // Clic sur une catégorie
         categoriesGrid.addEventListener('click', (event) => {
             const card = event.target.closest('.selection-card');
             if (!card) return;
-
             if (activeCategoryCard) activeCategoryCard.classList.remove('active');
             card.classList.add('active');
             activeCategoryCard = card;
-            
             selectedCategory = card.dataset.categoryName;
-            const subcategories = categoriesData[selectedCategory];
-
-            // Vide les grilles suivantes
+            
             subcategoriesGrid.innerHTML = '';
             eggsGrid.innerHTML = '';
             if (activeSubCategoryCard) activeSubCategoryCard.classList.remove('active');
             if (activeEggCard) activeEggCard.classList.remove('active');
             selectedDockerImageInput.value = '';
+            serverPortInput.value = '';
+            serverPortInput.readOnly = false;
 
-            // Remplit la grille des sous-catégories
-            Object.keys(subcategories).forEach(subCategoryName => {
-                const subCategoryCard = document.createElement('div');
-                subCategoryCard.className = 'selection-card';
-                subCategoryCard.dataset.subCategoryName = subCategoryName;
-                subCategoryCard.innerHTML = `<i class="fa-solid fa-layer-group"></i><h4>${subCategoryName}</h4>`;
-                subcategoriesGrid.appendChild(subCategoryCard);
+            Object.keys(categoriesData[selectedCategory]).forEach(subCategoryName => {
+                const subCard = document.createElement('div');
+                subCard.className = 'selection-card';
+                subCard.dataset.subCategoryName = subCategoryName;
+                subCard.innerHTML = `<i class="fa-solid fa-layer-group"></i><h4>${subCategoryName}</h4>`;
+                subcategoriesGrid.appendChild(subCard);
             });
         });
         
-        // Clic sur une sous-catégorie
         subcategoriesGrid.addEventListener('click', (event) => {
             const card = event.target.closest('.selection-card');
             if (!card) return;
-
             if (activeSubCategoryCard) activeSubCategoryCard.classList.remove('active');
             card.classList.add('active');
             activeSubCategoryCard = card;
-
             const subCategoryName = card.dataset.subCategoryName;
-            const eggs = categoriesData[selectedCategory][subCategoryName];
             
-            // Vide la grille des eggs
             eggsGrid.innerHTML = '';
             if (activeEggCard) activeEggCard.classList.remove('active');
             selectedDockerImageInput.value = '';
+            serverPortInput.value = '';
+            serverPortInput.readOnly = false;
 
-            // Remplit la grille des eggs
-            eggs.forEach(egg => {
+            categoriesData[selectedCategory][subCategoryName].forEach(egg => {
                 const eggCard = document.createElement('div');
                 eggCard.className = 'selection-card';
                 eggCard.dataset.dockerImage = egg.docker_image;
+                eggCard.dataset.eggInfo = JSON.stringify(egg);
                 eggCard.innerHTML = `<i class="fa-solid fa-egg"></i><h4>${egg.name}</h4>`;
                 eggsGrid.appendChild(eggCard);
             });
         });
 
-        // Clic sur un egg
         eggsGrid.addEventListener('click', (event) => {
             const card = event.target.closest('.selection-card');
             if (!card) return;
-            
             if (activeEggCard) activeEggCard.classList.remove('active');
             card.classList.add('active');
             activeEggCard = card;
             
             selectedDockerImageInput.value = card.dataset.dockerImage;
+            
+            const eggInfo = JSON.parse(card.dataset.eggInfo);
+            if (eggInfo.ports && Object.keys(eggInfo.ports).length > 0) {
+                const primaryPort = Object.keys(eggInfo.ports)[0];
+                serverPortInput.value = primaryPort;
+                serverPortInput.readOnly = true;
+            } else {
+                serverPortInput.value = '';
+                serverPortInput.readOnly = false;
+            }
         });
     </script>
 </body>

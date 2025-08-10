@@ -1,5 +1,12 @@
 package io.monpanel.panel;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
@@ -10,20 +17,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 @Service
 public class DockerService {
 
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
 
-    // La méthode de création est maintenant générique
     public String createServer(Server server, GameEgg egg) throws Exception {
         log.info("Préparation de l'environnement pour le serveur : {}", server.getName());
 
@@ -41,7 +39,6 @@ public class DockerService {
             "--name", server.getName().replaceAll("\\s+", "_") + "_" + System.currentTimeMillis()
         ));
 
-        // Ajout des ports depuis l'Egg
         if (egg.getPorts() != null) {
             for (Map.Entry<String, String> entry : egg.getPorts().entrySet()) {
                 command.add("-p");
@@ -49,11 +46,9 @@ public class DockerService {
             }
         }
 
-        // Ajout du volume de données
         command.add("-v");
         command.add(server.getHostPath() + ":/data");
 
-        // Ajout des variables d'environnement depuis l'Egg
         if (egg.getEnvironment() != null) {
             for (Map.Entry<String, String> entry : egg.getEnvironment().entrySet()) {
                 command.add("-e");
@@ -61,7 +56,6 @@ public class DockerService {
             }
         }
         
-        // Ajout de l'image Docker à la fin
         command.add(server.getDockerImage());
 
         try {
@@ -173,5 +167,36 @@ public class DockerService {
             throw new RuntimeException("Erreur Docker lors de l'action '" + action + "': " + errorReader.readLine());
         }
         log.info("Action '{}' exécutée avec succès pour le conteneur {}", action, containerId);
+    }
+    
+    public void pullLlmModel(String containerId, String modelName) throws Exception {
+        if (containerId == null || containerId.isBlank() || modelName == null || modelName.isBlank()) {
+            throw new IllegalArgumentException("L'ID du conteneur et le nom du modèle sont requis.");
+        }
+        
+        log.info("Tentative de téléchargement du modèle '{}' pour le conteneur {}", modelName, containerId);
+
+        List<String> command = List.of("docker", "exec", containerId, "ollama", "pull", modelName);
+        
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            Process process = processBuilder.start();
+
+            new Thread(() -> new BufferedReader(new InputStreamReader(process.getInputStream())).lines().forEach(log::info)).start();
+            new Thread(() -> new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().forEach(log::error)).start();
+
+            int exitCode = process.waitFor();
+
+            if (exitCode != 0) {
+                log.error("La commande 'ollama pull' a échoué avec le code de sortie : {}", exitCode);
+                throw new RuntimeException("Échec du téléchargement du modèle. Vérifiez les logs pour plus de détails.");
+            }
+            
+            log.info("Le modèle '{}' a été téléchargé avec succès pour le conteneur {}.", modelName, containerId);
+
+        } catch (Exception e) {
+            log.error("Impossible d'exécuter la commande de téléchargement pour le modèle '{}'.", modelName, e);
+            throw e;
+        }
     }
 }

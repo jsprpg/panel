@@ -36,7 +36,7 @@ public class ServerController {
         model.addAttribute("nests", eggService.getGroupedEggs());
         return "create-server";
     }
-    
+
     @PostMapping("/servers/create")
     public String createServer(Authentication authentication,
                                @RequestParam String serverName,
@@ -46,10 +46,9 @@ public class ServerController {
                                @RequestParam double cpu,
                                @RequestParam int disk,
                                RedirectAttributes redirectAttributes) {
-                                   
+
         User currentUser = userRepository.findByUsername(authentication.getName()).get();
 
-        // --- Logique pour trouver le bon Egg ---
         Optional<GameEgg> foundEgg = eggService.getGroupedEggs().values().stream()
             .flatMap(subcategories -> subcategories.values().stream())
             .flatMap(java.util.List::stream)
@@ -60,7 +59,7 @@ public class ServerController {
             redirectAttributes.addFlashAttribute("errorMessage", "Impossible de trouver la configuration (Egg) pour l'image : " + dockerImage);
             return "redirect:/servers/new";
         }
-        
+
         Server newServer = new Server();
         newServer.setName(serverName);
         newServer.setHostPort(serverPort);
@@ -69,14 +68,14 @@ public class ServerController {
         newServer.setMemory(memory);
         newServer.setCpu(cpu);
         newServer.setDisk(disk);
+        newServer.setViewType(foundEgg.get().getView_type()); // Sauvegarde du type de vue
+
         try {
-            // On passe maintenant le serveur ET l'egg trouvé au DockerService
             String containerId = dockerService.createServer(newServer, foundEgg.get());
             newServer.setContainerId(containerId);
             serverRepository.save(newServer);
             redirectAttributes.addFlashAttribute("successMessage", "Le serveur '" + serverName + "' a été créé avec succès !");
         } catch (Exception e) {
-            System.err.println("ERREUR LORS DE LA CRÉATION DU SERVEUR : " + e.getMessage());
             redirectAttributes.addFlashAttribute("errorMessage", "Impossible de créer le serveur : " + e.getMessage());
         }
         return "redirect:/servers";
@@ -94,12 +93,11 @@ public class ServerController {
             serverRepository.delete(serverToDelete);
             redirectAttributes.addFlashAttribute("successMessage", "Le serveur '" + serverToDelete.getName() + "' a été supprimé avec succès.");
         } catch (Exception e) {
-            System.err.println("ERREUR LORS DE LA SUPPRESSION DU SERVEUR : " + e.getMessage());
             redirectAttributes.addFlashAttribute("errorMessage", "Impossible de supprimer le serveur : " + e.getMessage());
         }
         return "redirect:/servers";
     }
-
+    
     @PostMapping("/servers/force-delete/{id}")
     public String forceDeleteServer(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         Server serverToForceDelete = serverRepository.findById(id).orElse(null);
@@ -121,16 +119,11 @@ public class ServerController {
     public String viewServer(@PathVariable Long id, Model model) {
         Server server = serverRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid server Id:" + id));
-        
-        // --- Logique de sélection de vue ---
-        String dockerImage = server.getDockerImage();
-        
-        // On devine le type d'interface en fonction de l'image
-        if (dockerImage != null && dockerImage.contains("ollama")) {
+
+        if ("llm".equals(server.getViewType())) {
             model.addAttribute("server", server);
-            return "view-llm"; // Affiche la nouvelle interface de chat
+            return "view-llm";
         } else {
-            // Comportement par défaut pour les serveurs de jeu
             ServerStats initialStats = dockerService.getStats(server.getContainerId());
             model.addAttribute("server", server);
             model.addAttribute("initialStats", initialStats);
@@ -150,7 +143,7 @@ public class ServerController {
         }
         return "redirect:/server/" + id;
     }
-    
+
     @GetMapping("/server/{id}/files")
     public String filesPage(@PathVariable Long id, Model model) {
         Server server = serverRepository.findById(id)

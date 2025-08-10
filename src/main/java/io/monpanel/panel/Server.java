@@ -20,17 +20,18 @@ public class Server {
     private String containerId;
     private String dockerImage;
     private int hostPort;
-    private String hostPath; // Chemin sur la machine hôte, ex: /var/panel/servers/uuid
+    private String hostPath;
+    private String viewType; // <-- LIGNE AJOUTÉE
 
     @ManyToOne
     @JoinColumn(name = "user_id")
     private User owner;
 
-    private int memory; // en Mo (ex: 1024)
-    private double cpu; // en cœurs (ex: 1.5)
-    private int disk;   // en Go (ex: 5)
+    private int memory;
+    private double cpu;
+    private int disk;
 
-    // Getters et Setters
+    // Getters et Setters (avec le nouveau champ)
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
@@ -51,4 +52,6 @@ public class Server {
     public void setDisk(int disk) { this.disk = disk; }
     public String getHostPath() { return hostPath; }
     public void setHostPath(String hostPath) { this.hostPath = hostPath; }
+    public String getViewType() { return viewType; } // <-- NOUVEAU GETTER/SETTER
+    public void setViewType(String viewType) { this.viewType = viewType; } // <-- NOUVEAU GETTER/SETTER
 }
