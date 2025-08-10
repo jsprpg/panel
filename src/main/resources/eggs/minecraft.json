@@ -1,0 +1,4 @@
+{
+  "name": "Minecraft Vanilla",
+  "docker_image": "docker run -d --name=mc -p 25565:25565 rlenferink/minecraft /start"
+}

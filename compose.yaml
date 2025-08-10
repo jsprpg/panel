@@ -1,0 +1,12 @@
+# Indique la version du format Docker Compose
+version: '3.8'
+
+# C'est la section "mapping" que l'erreur mentionne
+services:
+  # On définit un service simple pour l'exemple
+  my-app:
+    # Utilise l'image de ton application (à définir plus tard)
+    # Pour l'instant, on peut utiliser une image simple comme nginx
+    image: 'nginx:latest'
+    ports:
+      - '8081:80'

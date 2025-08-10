@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mes Serveurs - Mon Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+
+        <main class="page-content">
+            <h1>Mes Serveurs</h1>
+
+            <div th:if="${successMessage}" class="card" style="margin-bottom: 20px; background-color: #2a9d8f; color: white;">
+                <p th:text="${successMessage}"></p>
+            </div>
+            <div th:if="${errorMessage}" class="card" style="margin-bottom: 20px; background-color: #e76f51; color: white;">
+                <p th:text="${errorMessage}"></p>
+            </div>
+            
+            <a href="/servers/new" style="display: inline-block; padding: 10px 15px; background-color: var(--accent-primary); color: white; text-decoration: none; border-radius: 6px; margin-bottom: 20px;">+ Créer un nouveau serveur</a>
+            
+            <div class="card" style="padding: 0;">
+                <table class="file-table">
+                    <thead>
+                        <tr>
+                            <th>Nom du Serveur</th>
+                            <th>Adresse</th>
+                            <th>CPU</th>
+                            <th>RAM</th>
+                            <th style="width: 220px; text-align: right; padding-right: 20px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr th:each="server : ${servers}" class="file-row" th:attr="data-server-id=${server.id}">
+                            <td class="file-name">
+                                <a th:href="@{/server/{id}(id=${server.id})}" th:text="${server.name}" style="color: var(--text-primary); text-decoration: none;"></a>
+                            </td>
+                            <td th:text="'127.0.0.1:' + ${server.hostPort}"></td>
+                            
+                            <td><span th:id="'cpu-stats-' + ${server.id}">Chargement...</span></td>
+                            <td><span th:id="'ram-stats-' + ${server.id}">Chargement...</span></td>
+
+                            <td class="actions-cell" style="display: flex; justify-content: flex-end; gap: 10px;">
+                                <form th:action="@{/servers/delete/{id}(id=${server.id})}" method="post" 
+                                      onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce serveur ?');">
+                                    <button type="submit" class="action-btn" style="background-color: #f4a261; padding: 5px 10px; font-size: 14px;">Supprimer</button>
+                                </form>
+                        
+                                <form th:action="@{/servers/force-delete/{id}(id=${server.id})}" method="post" 
+                                      onsubmit="return confirm('ATTENTION : Forcer la suppression va retirer le serveur du panel même si le conteneur Docker ne peut pas être supprimé. Continuer ?');">
+                                    <button type="submit" class="action-btn" style="background-color: #e76f51; padding: 5px 10px; font-size: 14px;">Forcer Suppr.</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr th:if="${#lists.isEmpty(servers)}">
+                            <td colspan="5" style="padding: 10px; text-align: center;">Vous n'avez aucun serveur.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script th:inline="javascript">
+        document.addEventListener('DOMContentLoaded', () => {
+            const updateAllStats = () => {
+                const serverRows = document.querySelectorAll('[data-server-id]');
+
+                serverRows.forEach(row => {
+                    const serverId = row.dataset.serverId;
+                    const cpuElement = document.getElementById(`cpu-stats-${serverId}`);
+                    const ramElement = document.getElementById(`ram-stats-${serverId}`);
+
+                    fetch(`/api/server/${serverId}/stats`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                cpuElement.textContent = 'Erreur';
+                                ramElement.textContent = 'Erreur';
+                                return;
+                            }
+                            if (data.offline) {
+                                cpuElement.textContent = 'Offline';
+                                ramElement.textContent = 'Offline';
+                                return;
+                            }
+                            
+                            cpuElement.textContent = data.cpuPercent;
+                            ramElement.textContent = data.memoryUsage.split(' / ')[0];
+                        })
+                        .catch(error => {
+                            cpuElement.textContent = 'Erreur';
+                            ramElement.textContent = 'Erreur';
+                        });
+                });
+            };
+
+            updateAllStats();
+            setInterval(updateAllStats, 500);
+        });
+    </script>
+</body>
+</html>

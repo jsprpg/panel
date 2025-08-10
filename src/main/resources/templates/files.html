@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${server.name} + ' - Files'"></title>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+    <style>
+        #file-editor { display: none; }
+        #editor-textarea { width: 100%; height: 500px; background-color: #111; color: #eee; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+
+        <main class="page-content">
+            <h1 th:text="${server.name}"></h1>
+            <nav class="server-nav">
+                <ul>
+                    <li><a th:href="@{/server/{id}(id=${server.id})}">Console</a></li>
+                    <li><a href="#" class="active">Files</a></li>
+                    <li><a href="#">Databases</a></li>
+                    <li><a href="#">Schedules</a></li>
+                    <li><a href="#">Users</a></li>
+                    <li><a href="#">Backups</a></li>
+                    <li><a href="#">Network</a></li>
+                    <li><a href="#">Startup</a></li>
+                    <li><a href="#">Settings</a></li>
+                </ul>
+            </nav>
+
+            <div id="drop-zone" class="card" style="padding: 0;">
+                <div class="drop-zone-overlay">Déposez pour uploader</div>
+
+                <div id="file-browser">
+                    <div class="file-manager-header">
+                        <div id="breadcrumb" class="breadcrumb"></div>
+                        <div class="file-manager-actions">
+                            <button id="create-dir-btn" class="action-btn" style="background-color: #555;">Create Directory</button>
+                            <button id="upload-btn" class="action-btn" style="background-color: var(--accent-primary);">Upload</button>
+                            <button id="create-file-btn" class="action-btn" style="background-color: var(--accent-primary);">New File</button>
+                            <input type="file" id="file-upload-input" style="display: none;"/>
+                        </div>
+                    </div>
+                    <div id="file-manager-content"><p style="padding: 20px;">Chargement...</p></div>
+                </div>
+
+                <div id="file-editor" style="padding: 20px;">
+                    <h3 id="editing-filename"></h3>
+                    <textarea id="editor-textarea"></textarea>
+                    <div style="margin-top: 10px;">
+                        <button id="save-btn" class="action-btn btn-start">Sauvegarder</button>
+                        <button id="cancel-btn" class="action-btn btn-stop">Annuler</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="creation-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 id="modal-title">Créer</h3>
+            <form id="creation-form">
+                <label for="modal-input-name">Nom :</label>
+                <input type="text" id="modal-input-name" required autocomplete="off">
+                <div>
+                    <button type="submit" class="action-btn btn-start">Confirmer</button>
+                    <button type="button" id="modal-cancel-btn" class="action-btn btn-stop">Annuler</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script th:inline="javascript">
+        window.addEventListener('DOMContentLoaded', () => {
+            const serverId = /*[[${server.id}]]*/ '1';
+            const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+            const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+            const fileBrowser = document.getElementById('file-browser');
+            const fileEditor = document.getElementById('file-editor');
+            const creationModal = document.getElementById('creation-modal');
+            const fileManagerContent = document.getElementById('file-manager-content');
+            const breadcrumbDiv = document.getElementById('breadcrumb');
+            const dropZone = document.getElementById('drop-zone');
+            const fileUploadInput = document.getElementById('file-upload-input');
+            let currentPath = '.';
+            let creationType = '';
+            let editingFilePath = '';
+
+            const getIconForFile = (fileName, isDirectory) => { if (isDirectory) return 'fa-solid fa-folder'; const extension = fileName.split('.').pop().toLowerCase(); switch (extension) { case 'jar': return 'fa-solid fa-file-zipper'; case 'json': return 'fa-solid fa-file-code'; case 'yml': case 'yaml': return 'fa-solid fa-file-contract'; case 'txt': case 'log': return 'fa-solid fa-file-lines'; case 'png': case 'jpg': case 'jpeg': case 'gif': return 'fa-solid fa-file-image'; case 'zip': case 'rar': case '7z': case 'tar.gz': return 'fa-solid fa-file-archive'; default: return 'fa-solid fa-file'; } };
+            const joinPath = (p1, p2) => (p1 === '.' ? p2 : `${p1}/${p2}`);
+            const getParentPath = (path) => (path === '.' || !path.includes('/') ? '.' : path.substring(0, path.lastIndexOf('/')));
+            const formatBytes = (bytes, decimals = 2) => { if (bytes === 0) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]; };
+            
+            const renderBreadcrumb = (path) => {
+                const parts = path.split('/');
+                let html = `<span class="breadcrumb-link" data-path=".">/home/container</span>&nbsp;/&nbsp;`;
+                let currentBuiltPath = '.';
+                parts.forEach((part, index) => {
+                    if (part === '.' || part === '') return;
+                    currentBuiltPath = joinPath(currentBuiltPath, part);
+                    html += index === parts.length - 1 ? `<span>${part}</span>` : `<span class="breadcrumb-link" data-path="${currentBuiltPath}">${part}</span>&nbsp;/&nbsp;`;
+                });
+                breadcrumbDiv.innerHTML = html;
+            };
+
+            const toggleDropdown = (menu) => {
+                document.querySelectorAll('.dropdown-menu').forEach(m => {
+                    if (m !== menu) m.style.display = 'none';
+                });
+                menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+            };
+
+            const deleteFile = (path) => { if (!confirm(`Êtes-vous sûr de vouloir supprimer "${path}" ?`)) return; const formData = new FormData(); formData.append('path', path); fetch(`/api/server/${serverId}/files/delete`, { method: 'POST', headers: {[csrfHeader]: csrfToken}, body: formData }).then(() => loadFiles(currentPath)); };
+            const renameFile = (oldPath, oldName) => { const newName = prompt("Nouveau nom :", oldName); if (newName && newName !== oldName) { const newPath = joinPath(getParentPath(oldPath), newName); const formData = new FormData(); formData.append('oldPath', oldPath); formData.append('newPath', newPath); fetch(`/api/server/${serverId}/files/rename`, { method: 'POST', headers: {[csrfHeader]: csrfToken}, body: formData }).then(() => loadFiles(currentPath)); } };
+            const tarFile = (path) => { if (!confirm(`Archiver "${path}" en .tar.gz ?`)) return; const formData = new FormData(); formData.append('path', path); fetch(`/api/server/${serverId}/files/tar`, { method: 'POST', headers: {[csrfHeader]: csrfToken}, body: formData }).then(() => loadFiles(currentPath)); };
+            const untarFile = (path) => { if (!confirm(`Extraire l'archive "${path}" ici ?`)) return; const formData = new FormData(); formData.append('path', path); fetch(`/api/server/${serverId}/files/untar`, { method: 'POST', headers: {[csrfHeader]: csrfToken}, body: formData }).then(() => loadFiles(currentPath)); };
+
+            const loadFiles = (path = '.') => {
+                currentPath = path;
+                fileBrowser.style.display = 'block'; fileEditor.style.display = 'none';
+                fileManagerContent.innerHTML = '<p style="padding: 20px;">Chargement...</p>';
+                renderBreadcrumb(path);
+                fetch(`/api/server/${serverId}/files?path=${encodeURIComponent(path)}`).then(response => response.json()).then(files => {
+                    files.sort((a, b) => (a.directory !== b.directory ? (a.directory ? -1 : 1) : a.name.localeCompare(b.name)));
+                    let tableHtml = `<table class="file-table"><thead><tr><th style="width: 20px;"><input type="checkbox" id="select-all-checkbox"></th><th>Name</th><th>Size</th><th>Last Modified</th><th style="width: 50px;"></th></tr></thead><tbody>`;
+                    if (path !== '.') { tableHtml += `<tr class="file-row" data-action="navigate" data-path="${getParentPath(path)}"><td colspan="5" style="cursor: pointer;"><i class="fa-solid fa-arrow-turn-up" style="margin-right: 10px; color: var(--text-secondary);"></i>..</td></tr>`; }
+                    files.forEach((file, index) => {
+                        const fullPath = joinPath(currentPath, file.name);
+                        const iconClass = getIconForFile(file.name, file.directory);
+                        const action = file.directory ? 'navigate' : 'edit';
+                        const fileIdentifier = `file-${index}`;
+                        let dropdownOptions = `<a href="#" data-action="rename" data-path="${fullPath}" data-name="${file.name}"><i class="fa-solid fa-pencil"></i> Renommer</a><a href="/api/server/${serverId}/files/download?path=${encodeURIComponent(fullPath)}"><i class="fa-solid fa-download"></i> Télécharger</a>`;
+                        if (file.directory || !file.name.endsWith('.tar.gz')) { dropdownOptions += `<a href="#" data-action="tar" data-path="${fullPath}"><i class="fa-solid fa-file-zipper"></i> Archiver (.tar.gz)</a>`; }
+                        if (file.name.endsWith('.tar.gz')) { dropdownOptions += `<a href="#" data-action="untar" data-path="${fullPath}"><i class="fa-solid fa-box-open"></i> Extraire ici</a>`; }
+                        dropdownOptions += `<a href="#" data-action="delete" data-path="${fullPath}"><i class="fa-solid fa-trash"></i> Supprimer</a>`;
+                        tableHtml += `<tr class="file-row"><td style="text-align: center;"><input type="checkbox" class="file-checkbox"></td><td class="file-name" data-action="${action}" data-path="${fullPath}"><i class="${iconClass} file-icon"></i><span>${file.name}</span></td><td>${file.directory ? '-' : formatBytes(file.size)}</td><td>${file.modifiedDate}</td><td class="actions-cell"><i class="fa-solid fa-ellipsis-vertical action-icon" data-action="toggle-menu" data-target-id="${fileIdentifier}"></i><div class="dropdown-menu" id="dropdown-${fileIdentifier}">${dropdownOptions}</div></td></tr>`;
+                    });
+                    tableHtml += '</tbody></table>';
+                    fileManagerContent.innerHTML = tableHtml;
+                    document.getElementById('select-all-checkbox').addEventListener('change', (event) => {
+                        document.querySelectorAll('.file-checkbox').forEach(checkbox => checkbox.checked = event.target.checked);
+                    });
+                });
+            };
+            
+            document.addEventListener('click', (event) => {
+                const target = event.target;
+                const dataElement = target.closest('[data-action]');
+                if (dataElement) {
+                    event.stopPropagation();
+                    const { action, path, name, targetId } = dataElement.dataset;
+                    switch (action) {
+                        case 'navigate': loadFiles(path); break;
+                        case 'edit': editFile(path); break;
+                        case 'toggle-menu': toggleDropdown(document.getElementById(`dropdown-${targetId}`)); break;
+                        case 'rename': renameFile(path, name); break;
+                        case 'tar': tarFile(path); break;
+                        case 'untar': untarFile(path); break;
+                        case 'delete': deleteFile(path); break;
+                    }
+                } else if (target.closest('.breadcrumb-link')) {
+                    loadFiles(target.closest('.breadcrumb-link').dataset.path);
+                } else {
+                     document.querySelectorAll('.dropdown-menu').forEach(menu => menu.style.display = 'none');
+                }
+            });
+
+            const editFile = (path) => { editingFilePath = path; fileBrowser.style.display = 'none'; fileEditor.style.display = 'block'; document.getElementById('editing-filename').textContent = `Édition de : ${path}`; const textarea = document.getElementById('editor-textarea'); textarea.value = 'Chargement...'; fetch(`/api/server/${serverId}/files/content?path=${encodeURIComponent(path)}`).then(response => response.text()).then(content => { textarea.value = content; }); };
+            document.getElementById('save-btn').onclick = () => { const content = document.getElementById('editor-textarea').value; const headers = { 'Content-Type': 'text/plain' }; headers[csrfHeader] = csrfToken; fetch(`/api/server/${serverId}/files/content?path=${encodeURIComponent(editingFilePath)}`, { method: 'POST', headers: headers, body: content }).then(() => loadFiles(currentPath)); };
+            document.getElementById('cancel-btn').onclick = () => loadFiles(currentPath);
+
+            const handleFileUpload = (file) => {
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('path', currentPath);
+                const headers = {};
+                headers[csrfHeader] = csrfToken;
+                fetch(`/api/server/${serverId}/files/upload`, { method: 'POST', headers: headers, body: formData }).then(response => {
+                    alert(response.ok ? 'Upload réussi !' : 'Échec de l\'upload.');
+                    loadFiles(currentPath);
+                });
+            };
+            document.getElementById('upload-btn').onclick = () => fileUploadInput.click();
+            fileUploadInput.onchange = (event) => handleFileUpload(event.target.files[0]);
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false); });
+            ['dragenter', 'dragover'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover-active'), false); });
+            ['dragleave', 'drop'].forEach(eventName => { dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover-active'), false); });
+            dropZone.addEventListener('drop', (e) => { const files = e.dataTransfer.files; if (files.length) { handleFileUpload(files[0]); } }, false);
+
+            const openCreationModal = (type) => { creationType = type; document.getElementById('modal-title').textContent = `Créer un nouveau ${type}`; document.getElementById('modal-input-name').value = ''; creationModal.style.display = 'flex'; document.getElementById('modal-input-name').focus(); };
+            const closeCreationModal = () => { creationModal.style.display = 'none'; };
+            document.getElementById('create-dir-btn').onclick = () => openCreationModal('dossier');
+            document.getElementById('create-file-btn').onclick = () => openCreationModal('fichier');
+            document.getElementById('modal-cancel-btn').onclick = closeCreationModal;
+            creationModal.onclick = (event) => { if (event.target === creationModal) closeCreationModal(); };
+            document.getElementById('creation-form').onsubmit = (event) => { event.preventDefault(); const name = document.getElementById('modal-input-name').value; if (!name) return; const formData = new FormData(); formData.append('path', currentPath); const headers = {}; headers[csrfHeader] = csrfToken; let url = ''; if (creationType === 'dossier') { formData.append('dirName', name); url = `/api/server/${serverId}/files/create-directory`; } else { formData.append('fileName', name); url = `/api/server/${serverId}/files/create-file`; } fetch(url, { method: 'POST', headers: headers, body: formData }).then(() => { closeCreationModal(); loadFiles(currentPath); }); };
+            
+            loadFiles();
+        });
+    </script>
+</body>
+</html>

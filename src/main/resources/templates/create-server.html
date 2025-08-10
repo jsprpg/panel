@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Créer un Serveur</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
+</head>
+<body>
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+        <main class="page-content">
+            <h1>Créer un nouveau serveur</h1>
+            
+            <form th:action="@{/servers/create}" method="post">
+                <div class="card" style="margin-bottom: 20px;">
+                    <h2>Choisir un type de serveur (Nest)</h2>
+                    <div id="nests-grid" class="selection-grid">
+                        <div th:each="nestEntry : ${nests}" class="selection-card" th:attr="data-nest-name=${nestEntry.key}">
+                            <i class="fa-solid fa-layer-group"></i>
+                            <h4 th:text="${nestEntry.key}"></h4>
+                        </div>
+                    </div>
+
+                    <h2>Choisir une version (Egg)</h2>
+                    <div id="eggs-grid" class="selection-grid" style="min-height: 100px;">
+                        </div>
+                    <input type="hidden" name="dockerImage" id="selected-docker-image" required/>
+                </div>
+
+                <div class="card">
+                    <h2>Configuration du serveur</h2>
+                    
+                    <label for="serverName">Nom du serveur :</label>
+                    <input type="text" id="serverName" name="serverName" required>
+                    <br><br>
+                    
+                    <label for="serverPort">Port (ex: 25565) :</label>
+                    <input type="number" id="serverPort" name="serverPort" required>
+                    <br><br>
+                    
+                    <label for="memory">RAM (en Mo) :</label>
+                    <input type="number" id="memory" name="memory" required value="1024">
+                    <br><br>
+                    
+                    <label for="cpu">CPU (cœurs) :</label>
+                    <input type="number" id="cpu" name="cpu" step="0.1" required value="1.0">
+                    <br><br>
+                    
+                    <label for="disk">Stockage (en Go) :</label>
+                    <input type="number" id="disk" name="disk" required value="5">
+                    <br><br>
+                    
+                    <button type="submit" class="action-btn btn-start">Créer le serveur</button>
+                </div>
+            </form>
+        </main>
+    </div>
+    
+    <script th:inline="javascript">
+        const nestsData = /*[[${nests}]]*/ {};
+        const nestsGrid = document.getElementById('nests-grid');
+        const eggsGrid = document.getElementById('eggs-grid');
+        const selectedDockerImageInput = document.getElementById('selected-docker-image');
+        let activeNestCard = null;
+        let activeEggCard = null;
+
+        nestsGrid.addEventListener('click', (event) => {
+            const nestCard = event.target.closest('.selection-card');
+            if (!nestCard) return;
+
+            if (activeNestCard) activeNestCard.classList.remove('active');
+            nestCard.classList.add('active');
+            activeNestCard = nestCard;
+            
+            if (activeEggCard) {
+                activeEggCard.classList.remove('active');
+                activeEggCard = null;
+                selectedDockerImageInput.value = '';
+            }
+
+            const nestName = nestCard.dataset.nestName;
+            const eggs = nestsData[nestName];
+            
+            eggsGrid.innerHTML = '';
+            if(eggs) {
+                eggs.forEach(egg => {
+                    const eggCard = document.createElement('div');
+                    eggCard.className = 'selection-card';
+                    eggCard.dataset.dockerImage = egg.dockerImage;
+                    eggCard.innerHTML = `<i class="fa-solid fa-egg"></i><h4>${egg.name}</h4>`;
+                    eggsGrid.appendChild(eggCard);
+                });
+            }
+        });
+
+        eggsGrid.addEventListener('click', (event) => {
+            const eggCard = event.target.closest('.selection-card');
+            if (!eggCard) return;
+            
+            if (activeEggCard) activeEggCard.classList.remove('active');
+            eggCard.classList.add('active');
+            activeEggCard = eggCard;
+            
+            selectedDockerImageInput.value = eggCard.dataset.dockerImage;
+        });
+    </script>
+</body>
+</html>

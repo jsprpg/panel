@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Mon Panel</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="sidebar-header">MonPanel</div>
+        <nav class="sidebar-nav">
+            <ul>
+                <li><a href="/" class="active">Tableau de bord</a></li>
+                <li><a href="/servers">Mes Serveurs</a></li>
+                <li sec:authorize="hasRole('ADMIN')">
+                    <a href="/admin">Administration</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+
+    <div class="main-content">
+        <header class="header">
+            <div class="user-info">
+                <a href="/change-password" style="color: var(--text-secondary); margin-right: 20px; text-decoration: none;">Changer le mot de passe</a>
+                
+                <span>Bienvenue, <strong sec:authentication="name">Utilisateur</strong></span>
+                
+                <form class="logout-form" th:action="@{/logout}" method="post">
+                    <button type="submit">Déconnexion</button>
+                </form>
+            </div>
+        </header>
+
+        <main class="page-content">
+            <h1>Tableau de bord</h1>
+            <p>C'est ici que vous verrez un résumé de vos serveurs et de votre activité.</p>
+            
+            <div class="card" style="margin-top: 20px;">
+                <h2>Statut du système</h2>
+                <p>Tous les services sont opérationnels.</p>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

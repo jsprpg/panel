@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${server.name}"></title>
+    <meta name="_csrf" th:content="${_csrf.token}"/>
+    <meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+
+        <main class="page-content">
+            <h1 th:text="${server.name}" style="margin-bottom: 10px;">Nom du Serveur</h1>
+            
+            <nav class="server-nav">
+                <ul>
+                    <li><a href="#" class="active">Console</a></li>
+                    <li><a th:href="@{/server/{id}/files(id=${server.id})}">Files</a></li>
+                    <li><a href="#">Databases</a></li>
+                    <li><a href="#">Schedules</a></li>
+                    <li><a href="#">Users</a></li>
+                    <li><a href="#">Backups</a></li>
+                    <li><a href="#">Network</a></li>
+                    <li><a href="#">Startup</a></li>
+                    <li><a href="#">Settings</a></li>
+                </ul>
+            </nav>
+
+            <div class="actions-bar">
+                <form th:action="@{/server/{id}/action(id=${server.id})}" method="post">
+                    <input type="hidden" name="action" value="start"/>
+                    <button type="submit" class="action-btn btn-start">Start</button>
+                </form>
+                <form th:action="@{/server/{id}/action(id=${server.id})}" method="post">
+                    <input type="hidden" name="action" value="restart"/>
+                    <button type="submit" class="action-btn btn-restart">Restart</button>
+                </form>
+                <form th:action="@{/server/{id}/action(id=${server.id})}" method="post">
+                    <input type="hidden" name="action" value="stop"/>
+                    <button type="submit" class="action-btn btn-stop">Stop</button>
+                </form>
+            </div>
+
+            <div th:if="${successMessage}" class="card" style="margin-bottom: 20px; background-color: #2a9d8f; color: white;"><p th:text="${successMessage}"></p></div>
+            <div th:if="${errorMessage}" class="card" style="margin-bottom: 20px; background-color: #e76f51; color: white;"><p th:text="${errorMessage}"></p></div>
+
+            <div class="server-view-container">
+                <div class="server-main-content">
+                    <div class="console-container">
+                        <pre id="console-output"></pre>
+                        <input type="text" id="console-input" placeholder="> Type a command...">
+                    </div>
+                    <div class="charts-container" style="display: flex; gap: 20px;">
+                        <div style="flex: 1;"><canvas id="cpuChart"></canvas></div>
+                        <div style="flex: 1;"><canvas id="ramChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="server-sidebar-stats">
+                    <div class="stat-card">
+                        <h4>Address</h4>
+                        <p th:text="'127.0.0.1:' + ${server.hostPort}"></p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>CPU Load</h4>
+                        <p id="cpu-load-text" th:text="${initialStats.isOffline ? 'Offline' : initialStats.cpuPercent}"></p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Memory</h4>
+                        <p id="mem-usage-text" th:text="${initialStats.isOffline ? 'Offline' : initialStats.memoryUsage}"></p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Disk I/O</h4>
+                        <p id="disk-io-text" th:text="${initialStats.isOffline ? 'Offline' : initialStats.blockIO}"></p>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Network I/O</h4>
+                        <p id="net-io-text" th:text="${initialStats.isOffline ? 'Offline' : initialStats.netIO}"></p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script th:inline="javascript">
+        window.addEventListener('DOMContentLoaded', () => {
+            const serverId = /*[[${server.id}]]*/ '1';
+            const initialStats = /*[[${initialStats}]]*/ null;
+            
+            const consoleOutput = document.getElementById('console-output');
+            const consoleInput = document.getElementById('console-input');
+            const socket = new WebSocket(`ws://${window.location.host}/console-socket/${serverId}`);
+            socket.onopen = (e) => { consoleOutput.textContent += 'Connexion à la console établie.\n'; };
+            socket.onmessage = (event) => { consoleOutput.textContent += event.data + '\n'; consoleOutput.scrollTop = consoleOutput.scrollHeight; };
+            socket.onclose = (event) => { consoleOutput.textContent += '\nConnexion à la console fermée.'; };
+            socket.onerror = (error) => { consoleOutput.textContent += `\nErreur WebSocket: ${error.message}`; };
+            
+            const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+            const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+            consoleInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    const command = consoleInput.value;
+                    if (command) {
+                        consoleOutput.textContent += `> ${command}\n`;
+                        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                        const headers = { 'Content-Type': 'text/plain' };
+                        headers[csrfHeader] = csrfToken;
+                        fetch(`/api/server/${serverId}/command`, { method: 'POST', headers: headers, body: command })
+                            .then(response => response.text())
+                            .then(responseText => { console.log("Réponse RCON:", responseText); })
+                            .catch(error => console.error('Erreur API Commande:', error));
+                        consoleInput.value = '';
+                    }
+                }
+            });
+            
+            const totalRam = /*[[${server.memory}]]*/ 1024;
+            const totalCpu = /*[[${server.cpu}]]*/ 1.0;
+            const getUsageColor = (percentage) => { if (percentage > 90) return '#e76f51'; if (percentage > 70) return '#f4a261'; return '#2a9d8f'; };
+            const formatBytes = (bytes, decimals = 2) => { if (bytes === 0) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]; };
+            const parseSizeToBytes = (sizeString) => { const units = { 'B': 1, 'KB': 1024, 'MB': 1024**2, 'GB': 1024**3, 'TB': 1024**4 }; const match = sizeString.trim().match(/^([\d.]+)([KMGT]?B)$/i); if (!match) return 0; const value = parseFloat(match[1]); const unit = match[2].toUpperCase(); return value * (units[unit] || 1); };
+            
+            const baseChartOptions = { animation: { duration: 500 }, plugins: { legend: { display: true, labels: { color: 'white' } } }, scales: { y: { beginAtZero: true, ticks: { color: 'white' } }, x: { ticks: { color: 'white' } } } };
+            const cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ label: 'CPU (%)', data: Array(20).fill(null), borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.2)', tension: 0.4, fill: true, pointRadius: 0 }] }, options: { ...baseChartOptions, scales: { y: { beginAtZero: true, ticks: { color: 'white' }, max: totalCpu * 100 } } } });
+            const ramChart = new Chart(document.getElementById('ramChart').getContext('2d'), { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ label: 'RAM (Mo)', data: Array(20).fill(null), borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.2)', tension: 0.4, fill: true, pointRadius: 0 }] }, options: { ...baseChartOptions, scales: { y: { beginAtZero: true, ticks: { color: 'white' }, max: totalRam } } } });
+            
+            const cpuLoadText = document.getElementById('cpu-load-text');
+            const memUsageText = document.getElementById('mem-usage-text');
+            const diskIoText = document.getElementById('disk-io-text');
+            const netIoText = document.getElementById('net-io-text');
+
+            function updateStats() {
+                fetch(`/api/server/${serverId}/stats`).then(response => response.json()).then(data => {
+                    if (data.error) {
+                        cpuLoadText.textContent = 'Erreur'; memUsageText.textContent = 'Erreur'; diskIoText.textContent = 'Erreur'; netIoText.textContent = 'Erreur';
+                        console.error("Stats Error:", data.error);
+                        return;
+                    }
+                    if (data.offline) {
+                        cpuLoadText.textContent = 'Offline'; memUsageText.textContent = 'Offline'; diskIoText.textContent = 'Offline'; netIoText.textContent = 'Offline';
+                        return;
+                    }
+                    
+                    const cpuUsage = parseFloat(data.cpuPercent.replace('%', ''));
+                    cpuLoadText.textContent = `${cpuUsage.toFixed(2)} %`;
+                    cpuLoadText.style.color = getUsageColor((cpuUsage / (totalCpu * 100)) * 100);
+                    
+                    let ramUsage = 0;
+                    const memUsageString = data.memoryUsage.split(' / ')[0];
+                    if (memUsageString.includes('GiB')) { ramUsage = parseFloat(memUsageString.replace('GiB', '')) * 1024; } else if (memUsageString.includes('MiB')) { ramUsage = parseFloat(memUsageString.replace('MiB', '')); } else if (memUsageString.includes('KiB')) { ramUsage = parseFloat(memUsageString.replace('KiB', '')) / 1024; }
+                    const ramPerc = (ramUsage / totalRam) * 100;
+                    memUsageText.textContent = `${ramUsage.toFixed(2)} MiB / ${totalRam} MiB`;
+                    memUsageText.style.color = getUsageColor(ramPerc);
+                    
+                    const blockIO = data.blockIO.split(' / ');
+                    const diskRead = parseSizeToBytes(blockIO[0]);
+                    const diskWrite = parseSizeToBytes(blockIO[1]);
+                    diskIoText.textContent = `${formatBytes(diskRead)} / ${formatBytes(diskWrite)}`;
+                    
+                    const netIO = data.netIO.split(' / ');
+                    const netIn = parseSizeToBytes(netIO[0]);
+                    const netOut = parseSizeToBytes(netIO[1]);
+                    netIoText.textContent = `${formatBytes(netIn)} / ${formatBytes(netOut)}`;
+                    
+                    [cpuChart, ramChart].forEach((chart, i) => {
+                        chart.data.datasets[0].data.shift();
+                        chart.data.datasets[0].data.push([cpuUsage, ramUsage][i]);
+                        chart.update('quiet');
+                    });
+                }).catch(error => {
+                    console.error('API Error:', error);
+                    cpuLoadText.textContent = 'Error'; memUsageText.textContent = 'Error';
+                });
+            }
+
+            setInterval(updateStats, 2000);
+        });
+    </script>
+</body>
+</html>
