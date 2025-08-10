@@ -1,5 +1,7 @@
 package io.monpanel.panel;
 
+import java.util.Optional;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
@@ -18,7 +20,7 @@ public class ServerController {
     @Autowired
     private UserRepository userRepository;
     @Autowired
-    private EggService eggService; // Remplacement de GameEggRepository
+    private EggService eggService;
     @Autowired
     private DockerService dockerService;
 
@@ -46,6 +48,18 @@ public class ServerController {
                                RedirectAttributes redirectAttributes) {
                                    
         User currentUser = userRepository.findByUsername(authentication.getName()).get();
+
+        // --- Logique pour trouver le bon Egg ---
+        Optional<GameEgg> foundEgg = eggService.getGroupedEggs().values().stream()
+            .flatMap(subcategories -> subcategories.values().stream())
+            .flatMap(java.util.List::stream)
+            .filter(egg -> dockerImage.equals(egg.getDocker_image()))
+            .findFirst();
+
+        if (foundEgg.isEmpty()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Impossible de trouver la configuration (Egg) pour l'image : " + dockerImage);
+            return "redirect:/servers/new";
+        }
         
         Server newServer = new Server();
         newServer.setName(serverName);
@@ -56,7 +70,8 @@ public class ServerController {
         newServer.setCpu(cpu);
         newServer.setDisk(disk);
         try {
-            String containerId = dockerService.createMinecraftServer(newServer);
+            // On passe maintenant le serveur ET l'egg trouvé au DockerService
+            String containerId = dockerService.createServer(newServer, foundEgg.get());
             newServer.setContainerId(containerId);
             serverRepository.save(newServer);
             redirectAttributes.addFlashAttribute("successMessage", "Le serveur '" + serverName + "' a été créé avec succès !");
@@ -107,12 +122,20 @@ public class ServerController {
         Server server = serverRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid server Id:" + id));
         
-        ServerStats initialStats = dockerService.getStats(server.getContainerId());
-
-        model.addAttribute("server", server);
-        model.addAttribute("initialStats", initialStats);
-
-        return "view-server";
+        // --- Logique de sélection de vue ---
+        String dockerImage = server.getDockerImage();
+        
+        // On devine le type d'interface en fonction de l'image
+        if (dockerImage != null && dockerImage.contains("ollama")) {
+            model.addAttribute("server", server);
+            return "view-llm"; // Affiche la nouvelle interface de chat
+        } else {
+            // Comportement par défaut pour les serveurs de jeu
+            ServerStats initialStats = dockerService.getStats(server.getContainerId());
+            model.addAttribute("server", server);
+            model.addAttribute("initialStats", initialStats);
+            return "view-server";
+        }
     }
 
     @PostMapping("/server/{id}/action")

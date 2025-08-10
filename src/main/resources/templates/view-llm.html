@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${server.name}"></title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+
+        <main class="page-content">
+            <h1 th:text="${server.name}"></h1>
+            <p>Interface de Chat pour Modèle de Langage</p>
+            
+            <div class="card">
+                <h2>Conversation</h2>
+                <div id="chat-box" style="height: 400px; overflow-y: auto; border: 1px solid var(--border-color); padding: 10px; margin-bottom: 10px; background-color: var(--background-tertiary); border-radius: 4px;">
+                    </div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="chat-input" placeholder="Envoyez un message..." style="flex-grow: 1; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--background-secondary); color: var(--text-primary);">
+                    <button id="send-button" class="action-btn btn-start">Envoyer</button>
+                </div>
+            </div>
+             <div class="card" style="margin-top: 20px;">
+                <h4>Modèles disponibles sur cette instance Ollama :</h4>
+                <pre id="model-list"></pre>
+            </div>
+        </main>
+    </div>
+
+    <script th:inline="javascript">
+        window.addEventListener('DOMContentLoaded', () => {
+            const serverId = /*[[${server.id}]]*/ '1';
+            const serverPort = /*[[${server.hostPort}]]*/ '11434';
+            const chatBox = document.getElementById('chat-box');
+            const chatInput = document.getElementById('chat-input');
+            const sendButton = document.getElementById('send-button');
+            const modelList = document.getElementById('model-list');
+            const apiUrl = `http://${window.location.hostname}:${serverPort}`;
+
+            const addMessage = (sender, text) => {
+                const message = document.createElement('p');
+                message.innerHTML = `<strong>${sender}:</strong> ${text}`;
+                chatBox.appendChild(message);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            };
+
+            const sendMessage = async () => {
+                const message = chatInput.value;
+                if (!message) return;
+                
+                addMessage('Vous', message);
+                chatInput.value = '';
+                addMessage('LLM', '<i>Réfléchit...</i>');
+
+                try {
+                    const response = await fetch(`${apiUrl}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: "llama2", // Note: le modèle doit être installé dans le conteneur !
+                            prompt: message,
+                            stream: false 
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    chatBox.lastChild.innerHTML = `<strong>LLM:</strong> ${data.response}`;
+
+                } catch (error) {
+                    console.error("Erreur de communication avec l'API Ollama:", error);
+                    chatBox.lastChild.innerHTML = `<strong>LLM:</strong> <span style="color: #e76f51;">Erreur de connexion. Le service est-il démarré ?</span>`;
+                }
+            };
+
+            const fetchModels = async () => {
+                 try {
+                    const response = await fetch(`${apiUrl}/api/tags`);
+                    const data = await response.json();
+                    if (data.models && data.models.length > 0) {
+                        modelList.textContent = JSON.stringify(data.models.map(m => m.name), null, 2);
+                    } else {
+                         modelList.textContent = "Aucun modèle trouvé. Vous pouvez en installer un via la console du conteneur :\ndocker exec -it [container_id] ollama pull llama2";
+                    }
+                } catch (error) {
+                     modelList.textContent = "Impossible de contacter l'API Ollama.";
+                }
+            };
+
+            sendButton.addEventListener('click', sendMessage);
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
+
+            addMessage('Système', 'Bienvenue ! Envoyez un message pour commencer.');
+            fetchModels();
+        });
+    </script>
+</body>
+</html>

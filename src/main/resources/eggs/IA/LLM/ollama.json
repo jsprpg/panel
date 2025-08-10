@@ -1,0 +1,11 @@
+{
+  "name": "Ollama CPU",
+  "docker_image": "ollama/ollama",
+  "view_type": "llm",
+  "ports": {
+    "11434": "11434"
+  },
+  "environment": {
+    "OLLAMA_HOST": "0.0.0.0"
+  }
+}

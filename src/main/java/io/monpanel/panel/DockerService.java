@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -22,17 +23,8 @@ public class DockerService {
 
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
 
-    // --- CORRECTION ICI ---
-    // On dit à notre parser JSON d'ignorer les champs inconnus comme "Container"
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private static class DockerStatsData {
-        @JsonProperty("CPUPerc") String cpuPercent;
-        @JsonProperty("MemUsage") String memoryUsage;
-        @JsonProperty("NetIO") String netIO;
-        @JsonProperty("BlockIO") String blockIO;
-    }
-
-    public String createMinecraftServer(Server server) throws Exception {
+    // La méthode de création est maintenant générique
+    public String createServer(Server server, GameEgg egg) throws Exception {
         log.info("Préparation de l'environnement pour le serveur : {}", server.getName());
 
         String serverUuid = UUID.randomUUID().toString();
@@ -40,22 +32,37 @@ public class DockerService {
         Files.createDirectories(hostPath);
         server.setHostPath(hostPath.toAbsolutePath().toString());
 
-        log.info("Lancement de la commande Docker pour le serveur : {}", server.getName());
-        int rconPort = server.getHostPort() + 1;
+        log.info("Lancement de la commande Docker pour l'image : {}", server.getDockerImage());
 
         List<String> command = new ArrayList<>(List.of(
             "docker", "run", "-d",
-            "-p", server.getHostPort() + ":25565",
-            "-p", rconPort + ":25575",
-            "-v", server.getHostPath() + ":/data",
-            "-e", "EULA=TRUE",
-            "-e", "ENABLE_RCON=true",
-            "-e", "RCON_PASSWORD=supersecretpassword",
             "--memory=" + server.getMemory() + "m",
             "--cpus=" + String.valueOf(server.getCpu()),
-            "--name", server.getName().replaceAll("\\s+", "_") + "_" + System.currentTimeMillis(),
-            server.getDockerImage()
+            "--name", server.getName().replaceAll("\\s+", "_") + "_" + System.currentTimeMillis()
         ));
+
+        // Ajout des ports depuis l'Egg
+        if (egg.getPorts() != null) {
+            for (Map.Entry<String, String> entry : egg.getPorts().entrySet()) {
+                command.add("-p");
+                command.add(entry.getKey() + ":" + entry.getValue());
+            }
+        }
+
+        // Ajout du volume de données
+        command.add("-v");
+        command.add(server.getHostPath() + ":/data");
+
+        // Ajout des variables d'environnement depuis l'Egg
+        if (egg.getEnvironment() != null) {
+            for (Map.Entry<String, String> entry : egg.getEnvironment().entrySet()) {
+                command.add("-e");
+                command.add(entry.getKey() + "=" + entry.getValue());
+            }
+        }
+        
+        // Ajout de l'image Docker à la fin
+        command.add(server.getDockerImage());
 
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
@@ -63,9 +70,12 @@ public class DockerService {
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String containerId = reader.readLine();
             int exitCode = process.waitFor();
+
             if (exitCode != 0) {
                 BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                throw new RuntimeException("Erreur Docker : " + errorReader.readLine());
+                String errorLine = errorReader.readLine();
+                log.error("Erreur Docker (exit code {}): {}", exitCode, errorLine);
+                throw new RuntimeException("Erreur Docker : " + errorLine);
             }
             if (containerId == null || containerId.isEmpty()) {
                 throw new RuntimeException("N'a pas pu récupérer l'ID du conteneur. Docker est-il bien installé et en cours d'exécution ?");
@@ -78,6 +88,14 @@ public class DockerService {
         }
     }
     
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private static class DockerStatsData {
+        @JsonProperty("CPUPerc") String cpuPercent;
+        @JsonProperty("MemUsage") String memoryUsage;
+        @JsonProperty("NetIO") String netIO;
+        @JsonProperty("BlockIO") String blockIO;
+    }
+
     public ServerStats getStats(String containerId) {
         ServerStats stats = new ServerStats();
         if (containerId == null || containerId.isBlank()) {
