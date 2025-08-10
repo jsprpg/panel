@@ -1,0 +1,4 @@
+{
+  "name": "Minecraft Vanilla",
+  "docker_image": "itzg/minecraft-server"
+}

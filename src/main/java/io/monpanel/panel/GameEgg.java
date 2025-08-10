@@ -1,41 +1,36 @@
 package io.monpanel.panel;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GameEgg {
 
-    @JsonProperty("name")
     private String name;
+    private String docker_image;
+    
+    // Nouveau champ pour déterminer l'interface à utiliser ("server" ou "llm")
+    private String view_type = "server"; 
 
-    @JsonProperty("docker_image")
-    private String dockerImage;
+    // Nouveaux champs pour une configuration Docker flexible
+    private Map<String, String> ports; // ex: {"8080": "80"} -> Hôte:Conteneur
+    private Map<String, String> environment; // Variables d'environnement
 
-    private String nestName;
+    // --- Getters et Setters pour tous les champs ---
 
-    // Getters et Setters
-    public String getName() {
-        return name;
-    }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
+    public String getDocker_image() { return docker_image; }
+    public void setDocker_image(String docker_image) { this.docker_image = docker_image; }
 
-    public String getDockerImage() {
-        return dockerImage;
-    }
+    public String getView_type() { return view_type; }
+    public void setView_type(String view_type) { this.view_type = view_type; }
+    
+    public Map<String, String> getPorts() { return ports; }
+    public void setPorts(Map<String, String> ports) { this.ports = ports; }
 
-    public void setDockerImage(String dockerImage) {
-        this.dockerImage = dockerImage;
-    }
-
-    public String getNestName() {
-        return nestName;
-    }
-
-    public void setNestName(String nestName) {
-        this.nestName = nestName;
-    }
+    public Map<String, String> getEnvironment() { return environment; }
+    public void setEnvironment(Map<String, String> environment) { this.environment = environment; }
 }

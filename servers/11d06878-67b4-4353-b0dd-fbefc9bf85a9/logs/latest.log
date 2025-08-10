@@ -1,0 +1,39 @@
+[13:51:06] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, name=PROD]
+[13:51:08] [ServerMain/INFO]: No existing world data, creating new world
+[13:51:11] [ServerMain/INFO]: Loaded 1407 recipes
+[13:51:11] [ServerMain/INFO]: Loaded 1520 advancements
+[13:51:12] [Server thread/INFO]: Starting minecraft server version 1.21.8
+[13:51:12] [Server thread/INFO]: Loading properties
+[13:51:12] [Server thread/INFO]: Default game type: SURVIVAL
+[13:51:12] [Server thread/INFO]: Generating keypair
+[13:51:12] [Server thread/INFO]: Starting Minecraft server on *:25565
+[13:51:12] [Server thread/INFO]: Using epoll channel type
+[13:51:12] [Server thread/INFO]: Preparing level "world"
+[13:51:24] [Server thread/INFO]: Preparing start region for dimension minecraft:overworld
+[13:51:24] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:25] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:25] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:26] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:26] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:26] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:28] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:28] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:28] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:29] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:29] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:29] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:30] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:31] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:31] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:31] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:32] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:32] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[13:51:33] [Worker-Main-1/INFO]: Preparing spawn area: 4%
+[13:51:33] [Server thread/INFO]: Time elapsed: 9281 ms
+[13:51:33] [Server thread/INFO]: Done (21.123s)! For help, type "help"
+[13:51:33] [Server thread/INFO]: Starting remote control listener
+[13:51:33] [Server thread/INFO]: Thread RCON Listener started
+[13:51:33] [Server thread/INFO]: RCON running on 0.0.0.0:25575
+[13:52:23] [RCON Listener #1/INFO]: Thread RCON Client /172.17.0.1 started
+[13:52:24] [RCON Client /172.17.0.1 #2/INFO]: Thread RCON Client /172.17.0.1 shutting down
+[13:52:33] [Server thread/INFO]: Server empty for 60 seconds, pausing

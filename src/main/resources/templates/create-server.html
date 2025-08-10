@@ -15,17 +15,16 @@
             
             <form th:action="@{/servers/create}" method="post">
                 <div class="card" style="margin-bottom: 20px;">
-                    <h2>Choisir un type de serveur (Nest)</h2>
-                    <div id="nests-grid" class="selection-grid">
-                        <div th:each="nestEntry : ${nests}" class="selection-card" th:attr="data-nest-name=${nestEntry.key}">
-                            <i class="fa-solid fa-layer-group"></i>
-                            <h4 th:text="${nestEntry.key}"></h4>
+                    <h2>1. Choisir une Catégorie</h2>
+                    <div id="categories-grid" class="selection-grid">
                         </div>
-                    </div>
 
-                    <h2>Choisir une version (Egg)</h2>
-                    <div id="eggs-grid" class="selection-grid" style="min-height: 100px;">
-                        </div>
+                    <h2>2. Choisir une Sous-Catégorie</h2>
+                    <div id="subcategories-grid" class="selection-grid" style="min-height: 100px;"></div>
+
+                    <h2>3. Choisir un Egg</h2>
+                    <div id="eggs-grid" class="selection-grid" style="min-height: 100px;"></div>
+                    
                     <input type="hidden" name="dockerImage" id="selected-docker-image" required/>
                 </div>
 
@@ -59,51 +58,93 @@
     </div>
     
     <script th:inline="javascript">
-        const nestsData = /*[[${nests}]]*/ {};
-        const nestsGrid = document.getElementById('nests-grid');
+        const categoriesData = /*[[${nests}]]*/ {};
+        const categoriesGrid = document.getElementById('categories-grid');
+        const subcategoriesGrid = document.getElementById('subcategories-grid');
         const eggsGrid = document.getElementById('eggs-grid');
         const selectedDockerImageInput = document.getElementById('selected-docker-image');
-        let activeNestCard = null;
+
+        let activeCategoryCard = null;
+        let activeSubCategoryCard = null;
         let activeEggCard = null;
+        
+        let selectedCategory = '';
 
-        nestsGrid.addEventListener('click', (event) => {
-            const nestCard = event.target.closest('.selection-card');
-            if (!nestCard) return;
-
-            if (activeNestCard) activeNestCard.classList.remove('active');
-            nestCard.classList.add('active');
-            activeNestCard = nestCard;
-            
-            if (activeEggCard) {
-                activeEggCard.classList.remove('active');
-                activeEggCard = null;
-                selectedDockerImageInput.value = '';
-            }
-
-            const nestName = nestCard.dataset.nestName;
-            const eggs = nestsData[nestName];
-            
-            eggsGrid.innerHTML = '';
-            if(eggs) {
-                eggs.forEach(egg => {
-                    const eggCard = document.createElement('div');
-                    eggCard.className = 'selection-card';
-                    eggCard.dataset.dockerImage = egg.dockerImage;
-                    eggCard.innerHTML = `<i class="fa-solid fa-egg"></i><h4>${egg.name}</h4>`;
-                    eggsGrid.appendChild(eggCard);
-                });
-            }
+        // Initialise les catégories
+        Object.keys(categoriesData).forEach(categoryName => {
+            const categoryCard = document.createElement('div');
+            categoryCard.className = 'selection-card';
+            categoryCard.dataset.categoryName = categoryName;
+            categoryCard.innerHTML = `<i class="fa-solid fa-folder-tree"></i><h4>${categoryName}</h4>`;
+            categoriesGrid.appendChild(categoryCard);
         });
 
+        // Clic sur une catégorie
+        categoriesGrid.addEventListener('click', (event) => {
+            const card = event.target.closest('.selection-card');
+            if (!card) return;
+
+            if (activeCategoryCard) activeCategoryCard.classList.remove('active');
+            card.classList.add('active');
+            activeCategoryCard = card;
+            
+            selectedCategory = card.dataset.categoryName;
+            const subcategories = categoriesData[selectedCategory];
+
+            // Vide les grilles suivantes
+            subcategoriesGrid.innerHTML = '';
+            eggsGrid.innerHTML = '';
+            if (activeSubCategoryCard) activeSubCategoryCard.classList.remove('active');
+            if (activeEggCard) activeEggCard.classList.remove('active');
+            selectedDockerImageInput.value = '';
+
+            // Remplit la grille des sous-catégories
+            Object.keys(subcategories).forEach(subCategoryName => {
+                const subCategoryCard = document.createElement('div');
+                subCategoryCard.className = 'selection-card';
+                subCategoryCard.dataset.subCategoryName = subCategoryName;
+                subCategoryCard.innerHTML = `<i class="fa-solid fa-layer-group"></i><h4>${subCategoryName}</h4>`;
+                subcategoriesGrid.appendChild(subCategoryCard);
+            });
+        });
+        
+        // Clic sur une sous-catégorie
+        subcategoriesGrid.addEventListener('click', (event) => {
+            const card = event.target.closest('.selection-card');
+            if (!card) return;
+
+            if (activeSubCategoryCard) activeSubCategoryCard.classList.remove('active');
+            card.classList.add('active');
+            activeSubCategoryCard = card;
+
+            const subCategoryName = card.dataset.subCategoryName;
+            const eggs = categoriesData[selectedCategory][subCategoryName];
+            
+            // Vide la grille des eggs
+            eggsGrid.innerHTML = '';
+            if (activeEggCard) activeEggCard.classList.remove('active');
+            selectedDockerImageInput.value = '';
+
+            // Remplit la grille des eggs
+            eggs.forEach(egg => {
+                const eggCard = document.createElement('div');
+                eggCard.className = 'selection-card';
+                eggCard.dataset.dockerImage = egg.docker_image;
+                eggCard.innerHTML = `<i class="fa-solid fa-egg"></i><h4>${egg.name}</h4>`;
+                eggsGrid.appendChild(eggCard);
+            });
+        });
+
+        // Clic sur un egg
         eggsGrid.addEventListener('click', (event) => {
-            const eggCard = event.target.closest('.selection-card');
-            if (!eggCard) return;
+            const card = event.target.closest('.selection-card');
+            if (!card) return;
             
             if (activeEggCard) activeEggCard.classList.remove('active');
-            eggCard.classList.add('active');
-            activeEggCard = eggCard;
+            card.classList.add('active');
+            activeEggCard = card;
             
-            selectedDockerImageInput.value = eggCard.dataset.dockerImage;
+            selectedDockerImageInput.value = card.dataset.dockerImage;
         });
     </script>
 </body>
