@@ -1,0 +1,12 @@
+{
+  "name": "Minecraft (Paper)",
+  "docker_image": "itzg/minecraft-server",
+  "view_type": "server",
+  "ports": {
+    "25565": "25565"
+  },
+  "environment": {
+    "EULA": "TRUE",
+    "TYPE": "PAPER"
+  }
+}
