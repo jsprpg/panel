@@ -1,0 +1,39 @@
+[20:19:26] [ServerMain/INFO]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, name=PROD]
+[20:19:29] [ServerMain/INFO]: No existing world data, creating new world
+[20:19:33] [ServerMain/INFO]: Loaded 1407 recipes
+[20:19:33] [ServerMain/INFO]: Loaded 1520 advancements
+[20:19:33] [Server thread/INFO]: Starting minecraft server version 1.21.8
+[20:19:33] [Server thread/INFO]: Loading properties
+[20:19:33] [Server thread/INFO]: Default game type: SURVIVAL
+[20:19:33] [Server thread/INFO]: Generating keypair
+[20:19:33] [Server thread/INFO]: Starting Minecraft server on *:25565
+[20:19:33] [Server thread/INFO]: Using epoll channel type
+[20:19:34] [Server thread/INFO]: Preparing level "world"
+[20:19:48] [Server thread/INFO]: Preparing start region for dimension minecraft:overworld
+[20:19:48] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:48] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:49] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:49] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:50] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:50] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:51] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:52] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:52] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:52] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:53] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:54] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:54] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:54] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:55] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:55] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:56] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:56] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:57] [Worker-Main-1/INFO]: Preparing spawn area: 2%
+[20:19:58] [Worker-Main-1/INFO]: Preparing spawn area: 14%
+[20:19:58] [Server thread/INFO]: Time elapsed: 9910 ms
+[20:19:58] [Server thread/INFO]: Done (24.192s)! For help, type "help"
+[20:19:58] [Server thread/INFO]: Starting remote control listener
+[20:19:58] [Server thread/INFO]: Thread RCON Listener started
+[20:19:58] [Server thread/INFO]: RCON running on 0.0.0.0:25575
+[20:20:58] [Server thread/INFO]: Server empty for 60 seconds, pausing
+[20:50:37] [Server thread/WARN]: handleDisconnection() called twice

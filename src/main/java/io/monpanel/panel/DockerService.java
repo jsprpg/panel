@@ -1,13 +1,7 @@
 package io.monpanel.panel;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,38 +11,75 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 @Service
 public class DockerService {
 
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
 
-    public String createServer(Server server, GameEgg egg) throws Exception {
-        log.info("Préparation de l'environnement pour le serveur : {}", server.getName());
+    // ===================================================================
+    // MÉTHODE DÉDIÉE ET FIABLE POUR MINECRAFT (RETOUR À CE QUI MARCHAIT)
+    // ===================================================================
+    public String createMinecraftServer(Server server, GameEgg egg) throws Exception {
+        log.info("Création d'un serveur Minecraft avec la méthode dédiée.");
 
-        String serverUuid = UUID.randomUUID().toString();
-        Path hostPath = Paths.get("servers", serverUuid);
-        Files.createDirectories(hostPath);
-        server.setHostPath(hostPath.toAbsolutePath().toString());
-
-        log.info("Lancement de la commande Docker pour l'image : {}", server.getDockerImage());
-
+        Path hostPath = setupServerDirectories(server);
         List<String> command = new ArrayList<>(List.of(
             "docker", "run", "-d",
-            "--memory=" + server.getMemory() + "m",
-            "--cpus=" + String.valueOf(server.getCpu()),
-            "--name", server.getName().replaceAll("\\s+", "_") + "_" + System.currentTimeMillis()
+            "--name", generateContainerName(server.getName()),
+            "--memory", server.getMemory() + "m",
+            "--cpus", String.valueOf(server.getCpu()),
+            "-v", hostPath.toAbsolutePath().toString() + ":/data",
+            "-p", server.getHostPort() + ":" + server.getHostPort(),
+            // Ajout explicite et forcé des variables d'environnement
+            "-e", "EULA=TRUE"
         ));
+        
+        // Ajoute les variables d'environnement de l'Egg si elles existent
+        if (egg.getEnvironment() != null) {
+            for (Map.Entry<String, String> entry : egg.getEnvironment().entrySet()) {
+                // On s'assure de ne pas dupliquer EULA
+                if (!"EULA".equalsIgnoreCase(entry.getKey())) {
+                    command.add("-e");
+                    command.add(entry.getKey() + "=" + entry.getValue());
+                }
+            }
+        }
+        
+        command.add(server.getDockerImage());
 
+        return executeDockerCommand(command);
+    }
+
+    // ===================================================================
+    // MÉTHODE GÉNÉRIQUE POUR LES AUTRES SERVICES (LLM, etc.)
+    // ===================================================================
+    public String createGenericServer(Server server, GameEgg egg) throws Exception {
+        log.info("Création d'un serveur générique (non-Minecraft).");
+        
+        Path hostPath = setupServerDirectories(server);
+        List<String> command = new ArrayList<>(List.of(
+            "docker", "run", "-d",
+            "--name", generateContainerName(server.getName()),
+            "--memory", server.getMemory() + "m",
+            "--cpus", String.valueOf(server.getCpu()),
+            "-v", hostPath.toAbsolutePath().toString() + ":/data"
+        ));
+        
         if (egg.getPorts() != null) {
             for (Map.Entry<String, String> entry : egg.getPorts().entrySet()) {
                 command.add("-p");
                 command.add(entry.getKey() + ":" + entry.getValue());
             }
         }
-
-        command.add("-v");
-        command.add(server.getHostPath() + ":/data");
-
+        
         if (egg.getEnvironment() != null) {
             for (Map.Entry<String, String> entry : egg.getEnvironment().entrySet()) {
                 command.add("-e");
@@ -57,30 +88,57 @@ public class DockerService {
         }
         
         command.add(server.getDockerImage());
+        
+        return executeDockerCommand(command);
+    }
 
+
+    // --- Fonctions utilitaires ---
+
+    private Path setupServerDirectories(Server server) throws IOException {
+        String serverUuid = UUID.randomUUID().toString();
+        Path hostPath = Paths.get("servers", serverUuid);
+        Files.createDirectories(hostPath);
+        server.setHostPath(hostPath.toAbsolutePath().toString());
+        return hostPath;
+    }
+    
+    private String generateContainerName(String serverName) {
+        return serverName.replaceAll("[^a-zA-Z0-9_.-]", "_") + "_" + System.currentTimeMillis();
+    }
+
+    private String executeDockerCommand(List<String> command) throws Exception {
+        log.info("Commande Docker complète en cours d'exécution : {}", String.join(" ", command));
+        
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             Process process = processBuilder.start();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String containerId = reader.readLine();
-            int exitCode = process.waitFor();
+            
+            // On attend que la commande "docker run -d" se termine, ce qui est quasi instantané.
+            process.waitFor();
+            
+            // On récupère l'ID du conteneur via une commande 'inspect' car 'run -d' ne retourne que l'ID long
+            String containerName = command.get(4); // L'index 4 est le nom du conteneur que nous avons généré
+            Process inspectProcess = new ProcessBuilder("docker", "inspect", "--format", "{{.Id}}", containerName).start();
+            String containerId = new BufferedReader(new InputStreamReader(inspectProcess.getInputStream())).readLine();
+            
+            if (containerId == null || containerId.isBlank()) {
+                // Lecture de la sortie d'erreur du processus initial en cas de problème
+                String error = new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().collect(java.util.stream.Collectors.joining("\n"));
+                log.error("Erreur Docker : {}", error);
+                throw new RuntimeException("N'a pas pu récupérer l'ID du conteneur après sa création. Erreur : " + error);
+            }
 
-            if (exitCode != 0) {
-                BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
-                String errorLine = errorReader.readLine();
-                log.error("Erreur Docker (exit code {}): {}", exitCode, errorLine);
-                throw new RuntimeException("Erreur Docker : " + errorLine);
-            }
-            if (containerId == null || containerId.isEmpty()) {
-                throw new RuntimeException("N'a pas pu récupérer l'ID du conteneur. Docker est-il bien installé et en cours d'exécution ?");
-            }
             log.info("Conteneur créé avec succès ! ID : {}", containerId);
             return containerId.substring(0, 12);
+
         } catch (Exception e) {
-            log.error("Impossible de créer le conteneur Docker.", e);
+            log.error("Impossible d'exécuter la commande Docker.", e);
             throw new Exception("Impossible de créer le conteneur Docker. Erreur : " + e.getMessage());
         }
     }
+    
+    // --- Le reste des méthodes (getStats, delete, etc.) ---
     
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class DockerStatsData {

@@ -64,7 +64,11 @@
                 <div class="server-sidebar-stats">
                     <div class="stat-card">
                         <h4>Address</h4>
-                        <p th:text="'127.0.0.1:' + ${server.hostPort}"></p>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <span style="font-family: monospace;">127.0.0.1:</span>
+                            <input type="number" id="new-port-input" th:value="${server.hostPort}" style="width: 80px; padding: 5px; background-color: var(--background-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;"/>
+                            <button id="change-port-btn" class="action-btn" style="padding: 5px 10px; font-size: 12px;">Changer</button>
+                        </div>
                     </div>
                     <div class="stat-card">
                         <h4>CPU Load</h4>
@@ -88,6 +92,7 @@
     </div>
 
     <script th:inline="javascript">
+        // --- SCRIPT EXISTANT POUR LES STATS ET LA CONSOLE ---
         window.addEventListener('DOMContentLoaded', () => {
             const serverId = /*[[${server.id}]]*/ '1';
             const initialStats = /*[[${initialStats}]]*/ null;
@@ -122,8 +127,6 @@
             const totalRam = /*[[${server.memory}]]*/ 1024;
             const totalCpu = /*[[${server.cpu}]]*/ 1.0;
             const getUsageColor = (percentage) => { if (percentage > 90) return '#e76f51'; if (percentage > 70) return '#f4a261'; return '#2a9d8f'; };
-            const formatBytes = (bytes, decimals = 2) => { if (bytes === 0) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]; };
-            const parseSizeToBytes = (sizeString) => { const units = { 'B': 1, 'KB': 1024, 'MB': 1024**2, 'GB': 1024**3, 'TB': 1024**4 }; const match = sizeString.trim().match(/^([\d.]+)([KMGT]?B)$/i); if (!match) return 0; const value = parseFloat(match[1]); const unit = match[2].toUpperCase(); return value * (units[unit] || 1); };
             
             const baseChartOptions = { animation: { duration: 500 }, plugins: { legend: { display: true, labels: { color: 'white' } } }, scales: { y: { beginAtZero: true, ticks: { color: 'white' } }, x: { ticks: { color: 'white' } } } };
             const cpuChart = new Chart(document.getElementById('cpuChart').getContext('2d'), { type: 'line', data: { labels: Array(20).fill(''), datasets: [{ label: 'CPU (%)', data: Array(20).fill(null), borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.2)', tension: 0.4, fill: true, pointRadius: 0 }] }, options: { ...baseChartOptions, scales: { y: { beginAtZero: true, ticks: { color: 'white' }, max: totalCpu * 100 } } } });
@@ -136,49 +139,65 @@
 
             function updateStats() {
                 fetch(`/api/server/${serverId}/stats`).then(response => response.json()).then(data => {
-                    if (data.error) {
-                        cpuLoadText.textContent = 'Erreur'; memUsageText.textContent = 'Erreur'; diskIoText.textContent = 'Erreur'; netIoText.textContent = 'Erreur';
-                        console.error("Stats Error:", data.error);
-                        return;
-                    }
-                    if (data.offline) {
-                        cpuLoadText.textContent = 'Offline'; memUsageText.textContent = 'Offline'; diskIoText.textContent = 'Offline'; netIoText.textContent = 'Offline';
-                        return;
-                    }
-                    
+                    if (data.error) { cpuLoadText.textContent = 'Erreur'; memUsageText.textContent = 'Erreur'; diskIoText.textContent = 'Erreur'; netIoText.textContent = 'Erreur'; return; }
+                    if (data.offline) { cpuLoadText.textContent = 'Offline'; memUsageText.textContent = 'Offline'; diskIoText.textContent = 'Offline'; netIoText.textContent = 'Offline'; return; }
                     const cpuUsage = parseFloat(data.cpuPercent.replace('%', ''));
                     cpuLoadText.textContent = `${cpuUsage.toFixed(2)} %`;
                     cpuLoadText.style.color = getUsageColor((cpuUsage / (totalCpu * 100)) * 100);
-                    
                     let ramUsage = 0;
                     const memUsageString = data.memoryUsage.split(' / ')[0];
                     if (memUsageString.includes('GiB')) { ramUsage = parseFloat(memUsageString.replace('GiB', '')) * 1024; } else if (memUsageString.includes('MiB')) { ramUsage = parseFloat(memUsageString.replace('MiB', '')); } else if (memUsageString.includes('KiB')) { ramUsage = parseFloat(memUsageString.replace('KiB', '')) / 1024; }
                     const ramPerc = (ramUsage / totalRam) * 100;
                     memUsageText.textContent = `${ramUsage.toFixed(2)} MiB / ${totalRam} MiB`;
                     memUsageText.style.color = getUsageColor(ramPerc);
-                    
-                    const blockIO = data.blockIO.split(' / ');
-                    const diskRead = parseSizeToBytes(blockIO[0]);
-                    const diskWrite = parseSizeToBytes(blockIO[1]);
-                    diskIoText.textContent = `${formatBytes(diskRead)} / ${formatBytes(diskWrite)}`;
-                    
-                    const netIO = data.netIO.split(' / ');
-                    const netIn = parseSizeToBytes(netIO[0]);
-                    const netOut = parseSizeToBytes(netIO[1]);
-                    netIoText.textContent = `${formatBytes(netIn)} / ${formatBytes(netOut)}`;
-                    
-                    [cpuChart, ramChart].forEach((chart, i) => {
-                        chart.data.datasets[0].data.shift();
-                        chart.data.datasets[0].data.push([cpuUsage, ramUsage][i]);
-                        chart.update('quiet');
-                    });
-                }).catch(error => {
-                    console.error('API Error:', error);
-                    cpuLoadText.textContent = 'Error'; memUsageText.textContent = 'Error';
-                });
+                    diskIoText.textContent = data.blockIO;
+                    netIoText.textContent = data.netIO;
+                    [cpuChart, ramChart].forEach((chart, i) => { chart.data.datasets[0].data.shift(); chart.data.datasets[0].data.push([cpuUsage, ramUsage][i]); chart.update('quiet'); });
+                }).catch(error => { cpuLoadText.textContent = 'Error'; memUsageText.textContent = 'Error'; });
             }
-
             setInterval(updateStats, 2000);
+        });
+    </script>
+    
+    <script th:inline="javascript">
+        // --- NOUVEAU SCRIPT POUR LE CHANGEMENT DE PORT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const changePortButton = document.getElementById('change-port-btn');
+            const serverId = /*[[${server.id}]]*/ '1';
+            const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+            const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+
+            changePortButton.addEventListener('click', () => {
+                if (!confirm("Changer le port va redémarrer le serveur. Êtes-vous sûr de vouloir continuer ?")) {
+                    return;
+                }
+
+                const newPort = document.getElementById('new-port-input').value;
+                changePortButton.disabled = true;
+                changePortButton.textContent = '...';
+
+                const formData = new FormData();
+                formData.append('newPort', newPort);
+
+                fetch(`/api/server/${serverId}/change-port`, {
+                    method: 'POST',
+                    headers: { [csrfHeader]: csrfToken },
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) { return response.text().then(text => { throw new Error(text) }); }
+                    return response.text();
+                })
+                .then(data => {
+                    alert('Succès : ' + data);
+                    window.location.reload();
+                })
+                .catch(error => {
+                    alert('Erreur : ' + error.message);
+                    changePortButton.disabled = false;
+                    changePortButton.textContent = 'Changer';
+                });
+            });
         });
     </script>
 </body>

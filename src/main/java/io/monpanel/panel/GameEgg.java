@@ -1,25 +1,18 @@
 package io.monpanel.panel;
 
-import java.util.Map;
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class GameEgg {
 
     private String name;
-    
-    // Le nom du champ en Java correspond maintenant exactement au JSON
     private String docker_image;
-    
-    // Champ pour déterminer l'interface à utiliser ("server" ou "llm")
     private String view_type = "server"; 
+    private Map<String, String> ports;
+    private Map<String, String> environment;
 
-    // Champs pour une configuration Docker flexible
-    private Map<String, String> ports; // ex: {"8080": "80"} -> Hôte:Conteneur
-    private Map<String, String> environment; // Variables d'environnement
-
-    // --- Getters et Setters pour tous les champs ---
+    // --- Getters et Setters pour TOUS les champs ---
 
     public String getName() { 
         return name; 

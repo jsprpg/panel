@@ -48,18 +48,18 @@ public class ServerController {
                                RedirectAttributes redirectAttributes) {
 
         User currentUser = userRepository.findByUsername(authentication.getName()).get();
-
-        Optional<GameEgg> foundEgg = eggService.getGroupedEggs().values().stream()
-            .flatMap(subcategories -> subcategories.values().stream())
+        Optional<GameEgg> foundEggOpt = eggService.getGroupedEggs().values().stream()
+            .flatMap(sub -> sub.values().stream())
             .flatMap(java.util.List::stream)
             .filter(egg -> dockerImage.equals(egg.getDocker_image()))
             .findFirst();
-
-        if (foundEgg.isEmpty()) {
-            redirectAttributes.addFlashAttribute("errorMessage", "Impossible de trouver la configuration (Egg) pour l'image : " + dockerImage);
+        
+        if (foundEggOpt.isEmpty()) {
+            redirectAttributes.addFlashAttribute("errorMessage", "Configuration (Egg) introuvable pour l'image: " + dockerImage);
             return "redirect:/servers/new";
         }
-
+        GameEgg foundEgg = foundEggOpt.get();
+        
         Server newServer = new Server();
         newServer.setName(serverName);
         newServer.setHostPort(serverPort);
@@ -68,10 +68,17 @@ public class ServerController {
         newServer.setMemory(memory);
         newServer.setCpu(cpu);
         newServer.setDisk(disk);
-        newServer.setViewType(foundEgg.get().getView_type()); // Sauvegarde du type de vue
+        newServer.setViewType(foundEgg.getView_type());
 
         try {
-            String containerId = dockerService.createServer(newServer, foundEgg.get());
+            String containerId;
+            // CHOIX DE LA MÉTHODE DE CRÉATION
+            if ("server".equals(foundEgg.getView_type()) && dockerImage.contains("itzg/minecraft-server")) {
+                containerId = dockerService.createMinecraftServer(newServer, foundEgg);
+            } else {
+                containerId = dockerService.createGenericServer(newServer, foundEgg);
+            }
+            
             newServer.setContainerId(containerId);
             serverRepository.save(newServer);
             redirectAttributes.addFlashAttribute("successMessage", "Le serveur '" + serverName + "' a été créé avec succès !");
@@ -81,6 +88,20 @@ public class ServerController {
         return "redirect:/servers";
     }
 
+    @GetMapping("/server/{id}")
+    public String viewServer(@PathVariable Long id, Model model) {
+        Server server = serverRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("Invalid server Id:" + id));
+        if ("llm".equals(server.getViewType())) {
+            model.addAttribute("server", server);
+            return "view-llm";
+        } else {
+            ServerStats initialStats = dockerService.getStats(server.getContainerId());
+            model.addAttribute("server", server);
+            model.addAttribute("initialStats", initialStats);
+            return "view-server";
+        }
+    }
+    
     @PostMapping("/servers/delete/{id}")
     public String deleteServer(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         Server serverToDelete = serverRepository.findById(id).orElse(null);
@@ -93,11 +114,12 @@ public class ServerController {
             serverRepository.delete(serverToDelete);
             redirectAttributes.addFlashAttribute("successMessage", "Le serveur '" + serverToDelete.getName() + "' a été supprimé avec succès.");
         } catch (Exception e) {
+            System.err.println("ERREUR LORS DE LA SUPPRESSION DU SERVEUR : " + e.getMessage());
             redirectAttributes.addFlashAttribute("errorMessage", "Impossible de supprimer le serveur : " + e.getMessage());
         }
         return "redirect:/servers";
     }
-    
+
     @PostMapping("/servers/force-delete/{id}")
     public String forceDeleteServer(@PathVariable Long id, RedirectAttributes redirectAttributes) {
         Server serverToForceDelete = serverRepository.findById(id).orElse(null);
@@ -115,22 +137,6 @@ public class ServerController {
         return "redirect:/servers";
     }
 
-    @GetMapping("/server/{id}")
-    public String viewServer(@PathVariable Long id, Model model) {
-        Server server = serverRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid server Id:" + id));
-
-        if ("llm".equals(server.getViewType())) {
-            model.addAttribute("server", server);
-            return "view-llm";
-        } else {
-            ServerStats initialStats = dockerService.getStats(server.getContainerId());
-            model.addAttribute("server", server);
-            model.addAttribute("initialStats", initialStats);
-            return "view-server";
-        }
-    }
-
     @PostMapping("/server/{id}/action")
     public String handleServerAction(@PathVariable Long id, @RequestParam String action, RedirectAttributes redirectAttributes) {
         Server server = serverRepository.findById(id)
@@ -143,7 +149,7 @@ public class ServerController {
         }
         return "redirect:/server/" + id;
     }
-
+    
     @GetMapping("/server/{id}/files")
     public String filesPage(@PathVariable Long id, Model model) {
         Server server = serverRepository.findById(id)

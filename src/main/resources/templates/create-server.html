@@ -16,8 +16,7 @@
             <form th:action="@{/servers/create}" method="post">
                 <div class="card" style="margin-bottom: 20px;">
                     <h2>1. Choisir une Catégorie</h2>
-                    <div id="categories-grid" class="selection-grid">
-                        </div>
+                    <div id="categories-grid" class="selection-grid"></div>
 
                     <h2>2. Choisir une Sous-Catégorie</h2>
                     <div id="subcategories-grid" class="selection-grid" style="min-height: 100px;"></div>
@@ -134,13 +133,20 @@
             selectedDockerImageInput.value = card.dataset.dockerImage;
             
             const eggInfo = JSON.parse(card.dataset.eggInfo);
+            
+            // On remplit le port
             if (eggInfo.ports && Object.keys(eggInfo.ports).length > 0) {
                 const primaryPort = Object.keys(eggInfo.ports)[0];
                 serverPortInput.value = primaryPort;
-                serverPortInput.readOnly = true;
             } else {
                 serverPortInput.value = '';
+            }
+
+            // On verrouille le port SAUF si c'est un serveur Minecraft
+            if (eggInfo.docker_image && eggInfo.docker_image.includes('itzg/minecraft-server')) {
                 serverPortInput.readOnly = false;
+            } else {
+                serverPortInput.readOnly = true;
             }
         });
     </script>

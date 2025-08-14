@@ -10,6 +10,7 @@ import java.nio.file.attribute.FileTime;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -41,6 +42,9 @@ public class ServerApiController {
 
     @Autowired
     private DockerService dockerService;
+
+    @Autowired
+    private EggService eggService; // Dépendance ajoutée
 
     private Path resolveServerPath(Server server, String relativePath) {
         Path serverHostPath = Paths.get(server.getHostPath());
@@ -226,6 +230,39 @@ public class ServerApiController {
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Échec du téléchargement du modèle : " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/api/server/{id}/change-port")
+    public ResponseEntity<String> changeServerPort(@PathVariable Long id, @RequestParam int newPort) {
+        Server server = serverRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Serveur non trouvé"));
+
+        Optional<GameEgg> foundEggOpt = eggService.getGroupedEggs().values().stream()
+            .flatMap(sub -> sub.values().stream())
+            .flatMap(java.util.List::stream)
+            .filter(egg -> server.getDockerImage().equals(egg.getDocker_image()))
+            .findFirst();
+
+        if (foundEggOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Configuration (Egg) introuvable.");
+        }
+        GameEgg egg = foundEggOpt.get();
+
+        try {
+            dockerService.deleteServerContainer(server.getContainerId());
+            server.setHostPort(newPort);
+            String newContainerId;
+            if ("server".equals(egg.getView_type()) && egg.getDocker_image().contains("itzg/minecraft-server")) {
+                newContainerId = dockerService.createMinecraftServer(server, egg);
+            } else {
+                newContainerId = dockerService.createGenericServer(server, egg);
+            }
+            server.setContainerId(newContainerId);
+            serverRepository.save(server);
+            return ResponseEntity.ok("Le port a été changé et le serveur a été redémarré avec succès.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur lors du changement de port : " + e.getMessage());
         }
     }
 }
