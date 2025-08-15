@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="${server.name}"></title>
+    <meta name="_csrf" th:content="${_csrf.token}"/><meta name="_csrf_header" th:content="${_csrf.headerName}"/>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        #generated-image-container { background-color: #111; min-height: 256px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); margin-top: 15px; border-radius: 4px; }
+        #generated-image { max-width: 100%; max-height: 512px; }
+        .loader { width: 48px; height: 48px; border: 5px solid #FFF; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="sidebar" th:insert="~{index :: .sidebar}"></div>
+    <div class="main-content">
+        <header class="header" th:insert="~{index :: .header}"></header>
+
+        <main class="page-content">
+            <h1 th:text="${server.name}"></h1>
+            
+            <div class="card" style="margin-bottom: 20px;">
+                <h4>Installation de Modèles (.safetensors)</h4>
+                <div style="display: flex; gap: 15px; margin-top: 15px;">
+                     <input type="text" id="model-url-input" placeholder="Collez l'URL d'un modèle ici..." style="flex-grow: 1; padding: 8px;"/>
+                     <button id="install-model-btn" class="action-btn">Installer</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Génération d'image</h2>
+                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                    <label for="model-selector">Modèle à utiliser :</label>
+                    <select id="model-selector" style="flex-grow: 1; padding: 8px;"></select>
+                </div>
+                <label for="prompt-input">Prompt :</label>
+                <textarea id="prompt-input" rows="3" style="width: 100%;"></textarea>
+                <button id="generate-btn" class="action-btn btn-start" style="margin-top: 15px;">Générer</button>
+                <div id="generated-image-container">
+                    <p id="image-placeholder">L'image générée apparaîtra ici.</p>
+                    <img id="generated-image" src="" alt="Generated Image" style="display: none;"/>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script th:inline="javascript">
+        window.addEventListener('DOMContentLoaded', () => {
+            const serverId = /*[[${server.id}]]*/ '1';
+            const serverPort = /*[[${server.hostPort}]]*/ '7860';
+            const csrfToken = document.querySelector("meta[name='_csrf']").getAttribute("content");
+            const csrfHeader = document.querySelector("meta[name='_csrf_header']").getAttribute("content");
+            const apiUrl = `http://${window.location.hostname}:${serverPort}`;
+
+            const modelSelector = document.getElementById('model-selector');
+            const generateBtn = document.getElementById('generate-btn');
+            const promptInput = document.getElementById('prompt-input');
+            const imageContainer = document.getElementById('generated-image-container');
+            const imagePlaceholder = document.getElementById('image-placeholder');
+            const generatedImage = document.getElementById('generated-image');
+            const modelUrlInput = document.getElementById('model-url-input');
+            const installModelBtn = document.getElementById('install-model-btn');
+
+            const fetchModels = async () => {
+                try {
+                    const response = await fetch(`${apiUrl}/sdapi/v1/sd-models`);
+                    const models = await response.json();
+                    modelSelector.innerHTML = '';
+                    models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.title;
+                        option.textContent = model.model_name;
+                        modelSelector.appendChild(option);
+                    });
+                } catch (e) { console.error("Impossible de charger les modèles A1111", e); }
+            };
+
+            const generateImage = async () => {
+                imagePlaceholder.style.display = 'none';
+                generatedImage.style.display = 'none';
+                imageContainer.innerHTML = '<div class="loader"></div>';
+                generateBtn.disabled = true;
+
+                const payload = {
+                    prompt: promptInput.value,
+                    steps: 20
+                };
+                
+                try {
+                    // 1. Définir le modèle à utiliser
+                    await fetch(`${apiUrl}/sdapi/v1/options`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ "sd_model_checkpoint": modelSelector.value })
+                    });
+                    
+                    // 2. Générer l'image
+                    const response = await fetch(`${apiUrl}/sdapi/v1/txt2img`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await response.json();
+
+                    if (data.images && data.images[0]) {
+                        generatedImage.src = "data:image/png;base64," + data.images[0];
+                        generatedImage.style.display = 'block';
+                        imageContainer.innerHTML = '';
+                        imageContainer.appendChild(generatedImage);
+                    }
+                } catch (e) {
+                    console.error("Erreur de génération", e);
+                    imagePlaceholder.textContent = "Erreur de génération. Vérifiez que le service est bien démarré.";
+                    imagePlaceholder.style.display = 'block';
+                } finally {
+                    generateBtn.disabled = false;
+                }
+            };
+            
+            const installModel = async () => {
+                const modelUrl = modelUrlInput.value;
+                if (!modelUrl.endsWith('.safetensors') && !modelUrl.endsWith('.ckpt')) {
+                    alert("Veuillez fournir une URL directe vers un fichier .safetensors ou .ckpt");
+                    return;
+                }
+                installModelBtn.disabled = true;
+                installModelBtn.textContent = "Installation...";
+                
+                try {
+                    await fetch(`/api/server/${serverId}/a1111/install-model`, {
+                        method: 'POST',
+                        headers: { [csrfHeader]: csrfToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify(modelUrl)
+                    });
+                    alert("Installation terminée ! La liste des modèles va être rechargée.");
+                    modelUrlInput.value = '';
+                    await fetchModels();
+                } catch(e) {
+                    alert("Erreur lors de l'installation.");
+                } finally {
+                    installModelBtn.disabled = false;
+                    installModelBtn.textContent = "Installer";
+                }
+            };
+
+            generateBtn.addEventListener('click', generateImage);
+            installModelBtn.addEventListener('click', installModel);
+            fetchModels();
+        });
+    </script>
+</body>
+</html>

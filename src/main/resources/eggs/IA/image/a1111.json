@@ -1,0 +1,11 @@
+{
+  "name": "Stable Diffusion A1111 (Local)",
+  "docker_image": "mon-a1111:latest",
+  "view_type": "a1111",
+  "ports": {
+    "7860": "7860"
+  },
+  "environment": {
+    "CLI_ARGS": "--listen --api --enable-insecure-extension-access --xformers --no-half-vae --cors-allow-origins=*"
+  }
+}

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +26,7 @@ public class DockerService {
     private static final Logger log = LoggerFactory.getLogger(DockerService.class);
 
     // ===================================================================
-    // MÉTHODE DÉDIÉE ET FIABLE POUR MINECRAFT (RETOUR À CE QUI MARCHAIT)
+    // MÉTHODE DÉDIÉE ET FIABLE POUR MINECRAFT
     // ===================================================================
     public String createMinecraftServer(Server server, GameEgg egg) throws Exception {
         log.info("Création d'un serveur Minecraft avec la méthode dédiée.");
@@ -38,14 +39,11 @@ public class DockerService {
             "--cpus", String.valueOf(server.getCpu()),
             "-v", hostPath.toAbsolutePath().toString() + ":/data",
             "-p", server.getHostPort() + ":" + server.getHostPort(),
-            // Ajout explicite et forcé des variables d'environnement
             "-e", "EULA=TRUE"
         ));
         
-        // Ajoute les variables d'environnement de l'Egg si elles existent
         if (egg.getEnvironment() != null) {
             for (Map.Entry<String, String> entry : egg.getEnvironment().entrySet()) {
-                // On s'assure de ne pas dupliquer EULA
                 if (!"EULA".equalsIgnoreCase(entry.getKey())) {
                     command.add("-e");
                     command.add(entry.getKey() + "=" + entry.getValue());
@@ -54,12 +52,11 @@ public class DockerService {
         }
         
         command.add(server.getDockerImage());
-
         return executeDockerCommand(command);
     }
 
     // ===================================================================
-    // MÉTHODE GÉNÉRIQUE POUR LES AUTRES SERVICES (LLM, etc.)
+    // MÉTHODE GÉNÉRIQUE POUR LES AUTRES SERVICES (LLM, A1111, etc.)
     // ===================================================================
     public String createGenericServer(Server server, GameEgg egg) throws Exception {
         log.info("Création d'un serveur générique (non-Minecraft).");
@@ -88,7 +85,6 @@ public class DockerService {
         }
         
         command.add(server.getDockerImage());
-        
         return executeDockerCommand(command);
     }
 
@@ -114,17 +110,14 @@ public class DockerService {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             Process process = processBuilder.start();
             
-            // On attend que la commande "docker run -d" se termine, ce qui est quasi instantané.
             process.waitFor();
             
-            // On récupère l'ID du conteneur via une commande 'inspect' car 'run -d' ne retourne que l'ID long
-            String containerName = command.get(4); // L'index 4 est le nom du conteneur que nous avons généré
+            String containerName = command.get(4);
             Process inspectProcess = new ProcessBuilder("docker", "inspect", "--format", "{{.Id}}", containerName).start();
             String containerId = new BufferedReader(new InputStreamReader(inspectProcess.getInputStream())).readLine();
             
             if (containerId == null || containerId.isBlank()) {
-                // Lecture de la sortie d'erreur du processus initial en cas de problème
-                String error = new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().collect(java.util.stream.Collectors.joining("\n"));
+                String error = new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().collect(Collectors.joining("\n"));
                 log.error("Erreur Docker : {}", error);
                 throw new RuntimeException("N'a pas pu récupérer l'ID du conteneur après sa création. Erreur : " + error);
             }
@@ -138,7 +131,7 @@ public class DockerService {
         }
     }
     
-    // --- Le reste des méthodes (getStats, delete, etc.) ---
+    // --- Le reste des méthodes ---
     
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class DockerStatsData {
@@ -231,29 +224,48 @@ public class DockerService {
         if (containerId == null || containerId.isBlank() || modelName == null || modelName.isBlank()) {
             throw new IllegalArgumentException("L'ID du conteneur et le nom du modèle sont requis.");
         }
-        
         log.info("Tentative de téléchargement du modèle '{}' pour le conteneur {}", modelName, containerId);
-
         List<String> command = List.of("docker", "exec", containerId, "ollama", "pull", modelName);
-        
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
             Process process = processBuilder.start();
-
             new Thread(() -> new BufferedReader(new InputStreamReader(process.getInputStream())).lines().forEach(log::info)).start();
             new Thread(() -> new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().forEach(log::error)).start();
-
             int exitCode = process.waitFor();
-
             if (exitCode != 0) {
                 log.error("La commande 'ollama pull' a échoué avec le code de sortie : {}", exitCode);
                 throw new RuntimeException("Échec du téléchargement du modèle. Vérifiez les logs pour plus de détails.");
             }
-            
             log.info("Le modèle '{}' a été téléchargé avec succès pour le conteneur {}.", modelName, containerId);
-
         } catch (Exception e) {
             log.error("Impossible d'exécuter la commande de téléchargement pour le modèle '{}'.", modelName, e);
+            throw e;
+        }
+    }
+
+    public void installA1111Model(String containerId, String modelUrl) throws Exception {
+        if (containerId == null || modelUrl == null || !modelUrl.startsWith("http")) {
+            throw new IllegalArgumentException("ID de conteneur et URL de modèle valides requis.");
+        }
+        String fileName = modelUrl.substring(modelUrl.lastIndexOf('/') + 1);
+        if (!fileName.endsWith(".safetensors") && !fileName.endsWith(".ckpt")) {
+            throw new IllegalArgumentException("L'URL doit pointer vers un fichier .safetensors ou .ckpt");
+        }
+        String destinationPath = "/workspace/stable-diffusion-webui/models/Stable-diffusion/" + fileName;
+        log.info("Téléchargement du modèle A1111 depuis {} vers {}", modelUrl, destinationPath);
+        List<String> command = List.of("docker", "exec", containerId, "wget", modelUrl, "-O", destinationPath);
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder(command);
+            Process process = processBuilder.start();
+            new Thread(() -> new BufferedReader(new InputStreamReader(process.getInputStream())).lines().forEach(log::info)).start();
+            new Thread(() -> new BufferedReader(new InputStreamReader(process.getErrorStream())).lines().forEach(log::error)).start();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("Échec de la commande wget pour le téléchargement du modèle.");
+            }
+            log.info("Modèle A1111 {} installé avec succès.", fileName);
+        } catch (Exception e) {
+            log.error("Erreur lors de l'installation du modèle A1111.", e);
             throw e;
         }
     }

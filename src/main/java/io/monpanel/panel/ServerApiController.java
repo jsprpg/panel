@@ -44,7 +44,7 @@ public class ServerApiController {
     private DockerService dockerService;
 
     @Autowired
-    private EggService eggService; // Dépendance ajoutée
+    private EggService eggService;
 
     private Path resolveServerPath(Server server, String relativePath) {
         Path serverHostPath = Paths.get(server.getHostPath());
@@ -263,6 +263,22 @@ public class ServerApiController {
             return ResponseEntity.ok("Le port a été changé et le serveur a été redémarré avec succès.");
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Erreur lors du changement de port : " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/api/server/{id}/a1111/install-model")
+    public ResponseEntity<String> installA1111Model(@PathVariable Long id, @RequestBody String modelUrl) {
+        Server server = serverRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Serveur non trouvé"));
+        
+        String cleanModelUrl = modelUrl.replaceAll("\"", "").trim();
+
+        try {
+            dockerService.installA1111Model(server.getContainerId(), cleanModelUrl);
+            return ResponseEntity.ok("Installation du modèle lancée.");
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Échec de l'installation : " + e.getMessage());
         }
     }
 }
